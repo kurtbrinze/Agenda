@@ -2,8 +2,9 @@
 (function () {
 'use strict';
 
-const VERSION = 'V.11';
+const VERSION = 'V.12';
 const CHANGELOG = [
+  ['V.12', '2026-11-25', 'Tabla de camiones en Parámetros ordenada de mayor a menor capacidad de parrillas.'],
   ['V.11', '2026-11-25', 'Al programar rutas, choferes y ayudantes ya asignados ese día (rutas, otro camión o apoyo Z18) o con falta, permiso, vacaciones o IGSS aparecen tachados y no se pueden elegir.'],
   ['V.10', '2026-11-25', 'Al programar rutas, los camiones se listan de mayor a menor capacidad de parrillas.'],
   ['V.9', '2026-11-25', 'Traslados Z18 en orden fijo: GMC, AXEL, GRANDE (otros camiones de Z18 después).'],
@@ -146,6 +147,7 @@ function mergeCols(a, b) {
 const byName = (a, b) => String(a.nombre || a.codigo).localeCompare(String(b.nombre || b.codigo), 'es');
 const people = () => all('people').sort(byName);
 const activePeople = () => people().filter((p) => p.activo !== false);
+const byCapacity = (a, b) => (+b.capacidad || 0) - (+a.capacidad || 0) || String(a.nombre).localeCompare(String(b.nombre), 'es', { numeric: true });
 const trucks = () => all('trucks').sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es', { numeric: true }));
 const truckOn = (t) => t.activo !== false;
 const Z18_ORDEN = ['GMC', 'AXEL', 'GRANDE'];
@@ -560,7 +562,7 @@ function viewParams() {
   const t = ui.paramTab;
   if (t === 'camiones') {
     const tf = ui.truckFilter;
-    const all_ = trucks();
+    const all_ = trucks().sort(byCapacity);
     const list = all_.filter((x) => tf === 'todos' || (tf === 'on' ? truckOn(x) : tf === 'off' ? !truckOn(x) : tf === 'z18' ? (x.uso || []).includes('z18') : x.choferModo === 'varios'));
     body = `<div class="sec-h"><h2>Camiones <span class="small muted">· ${all_.filter(truckOn).length} en agenda de ${all_.length}</span></h2><button class="btn sm dark" data-act="truck-new">+ Camión</button></div>
     <div class="row"><input class="inp" style="max-width:340px" type="search" placeholder="Buscar matrícula, nombre o chofer…" value="${esc(ui.truckQ)}" data-filter="trucks" aria-label="Buscar camión">
@@ -688,7 +690,7 @@ function drawRuta() {
   const need = trucksNeeded(r);
   const choferes = activePeople().filter(isChofer);
   const ayud = activePeople().filter(isAyud);
-  const tr = trucks().sort((a, b) => (+b.capacidad || 0) - (+a.capacidad || 0) || String(a.nombre).localeCompare(String(b.nombre), 'es', { numeric: true })).filter((t) => (truckOn(t) && (!(t.uso || []).length || (t.uso || []).includes('rutas') || (t.uso || []).includes('apoyo'))) || r.camiones.some((c) => c.truck === t.id));
+  const tr = trucks().sort(byCapacity).filter((t) => (truckOn(t) && (!(t.uso || []).length || (t.uso || []).includes('rutas') || (t.uso || []).includes('apoyo'))) || r.camiones.some((c) => c.truck === t.id));
   const used = assignedElsewhere(idx);
   const usedT = trucksElsewhere(idx);
   const camH = r.camiones.map((c, ci) => {
