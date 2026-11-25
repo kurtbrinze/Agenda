@@ -1,0 +1,10 @@
+{
+  "name": "agenda",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Agenda diaria de rutas, empaques, Z18 y ausencias — Rinze Studio",
+  "dependencies": {
+    "@vercel/blob": "^2.0.0"
+  }
+}
