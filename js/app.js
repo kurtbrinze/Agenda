@@ -2,8 +2,9 @@
 (function () {
 'use strict';
 
-const VERSION = 'V.4';
+const VERSION = 'V.5';
 const CHANGELOG = [
+  ['V.5', '2026-11-25', 'Carga inicial desde Excel: 86 colaboradores con tarjeta y puesto, y 45 camiones con matrícula, capacidad y chofer. Puesto visible para todos los roles.'],
   ['V.4', '2026-11-25', 'Aviso por WhatsApp al autorizar permisos y vacaciones; número de tarjeta del colaborador; rol “Otro” con puesto (empacadores, verificadoras…) y filtro “Otros”.'],
   ['V.3', '2026-11-25', 'Sincronización compatible con el almacenamiento Blob conectado por OIDC.'],
   ['V.2', '2026-11-25', 'Logo oficial de Rinze Studio y registro de versiones en Ajustes.'],
@@ -35,6 +36,7 @@ const PUESTOS = ['Empacador', 'Empacadora', 'Verificador', 'Verificadora', 'Bode
 const isChofer = (p) => p.rol === 'chofer' || p.rol === 'ambos';
 const isAyud = (p) => p.rol === 'ayudante' || p.rol === 'ambos';
 const roleLabel = (p) => (p.rol === 'otro' ? (p.puesto || 'Otro') : ROLES[p.rol] || '');
+const puestoOf = (p) => p.puesto || roleLabel(p);
 const tarjeta = (p) => (p && p.tarjeta ? ' · #' + p.tarjeta : '');
 
 function pad(n) { return String(n).padStart(2, '0'); }
@@ -171,6 +173,41 @@ function seed() {
    ['2027-12-24', 'Nochebuena', true], ['2027-12-25', 'Navidad'], ['2027-12-31', 'Fin de año', true]]
     .forEach(([f, n, m]) => add('holidays', { id: 'h-' + f, fecha: f, nombre: n, medio: !!m }));
   persist(false);
+}
+
+/* Migración V.5: carga inicial de colaboradores y camiones desde Excel */
+const LS_MIG = 'agenda.migracion';
+function migrateV5() {
+  const C = window.AGENDA_CARGA;
+  if (!C || +(localStorage.getItem(LS_MIG) || 0) >= 5) return;
+  const now = Date.now();
+  const live = (col, id) => { const r = S.col[col][id]; return r && !r._d; };
+  C.people.forEach((p) => { if (!S.col.people[p.id]) S.col.people[p.id] = Object.assign({}, p, { _u: 2 }); });
+  C.trucks.forEach((t) => { if (!S.col.trucks[t.id]) S.col.trucks[t.id] = Object.assign({}, t, { _u: 2 }); });
+  const mapP = (id) => C.remapP[id] || id, mapT = (id) => C.remapT[id] || id;
+  const touch = (col, r, fn) => { const before = JSON.stringify(r); fn(r); if (JSON.stringify(r) !== before) r._u = now; };
+  const fixDay = (d) => {
+    (d.rutas || []).forEach((r) => (r.camiones || []).forEach((c) => { c.truck = mapT(c.truck); c.chofer = mapP(c.chofer); c.ayudantes = [...new Set((c.ayudantes || []).map(mapP))]; }));
+    if (d.z18) {
+      const v = {}; Object.entries(d.z18.viajes || {}).forEach(([k, n]) => (v[mapT(k)] = n)); d.z18.viajes = v;
+      (d.z18.apoyo || []).forEach((a) => { a.truck = mapT(a.truck); a.chofer = mapP(a.chofer); });
+    }
+  };
+  Object.values(S.col.days).forEach((d) => { if (!d._d) touch('days', d, fixDay); });
+  Object.values(S.col.templates).forEach((d) => { if (!d._d) touch('templates', d, fixDay); });
+  Object.values(S.col.absences).forEach((a) => { if (!a._d) touch('absences', a, (x) => (x.personId = mapP(x.personId))); });
+  Object.values(S.col.trucks).forEach((t) => { if (!t._d) touch('trucks', t, (x) => { x.chofer = mapP(x.chofer); x.choferes = [...new Set((x.choferes || []).map(mapP))]; }); });
+  // Retira los registros de ejemplo que ya tienen su equivalente del Excel
+  Object.keys(C.remapP).forEach((id) => { if (live('people', id)) S.col.people[id] = { id, _d: 1, _u: now }; });
+  Object.keys(C.remapT).forEach((id) => { if (live('trucks', id)) S.col.trucks[id] = { id, _d: 1, _u: now }; });
+  // Ejemplos sin equivalente: se retiran solo si no se usan en ningún día ni ausencia
+  const used = new Set();
+  Object.values(S.col.days).concat(Object.values(S.col.templates)).forEach((d) => { if (!d._d) { (d.rutas || []).forEach((r) => (r.camiones || []).forEach((c) => { used.add(c.chofer); (c.ayudantes || []).forEach((a) => used.add(a)); })); ((d.z18 || {}).apoyo || []).forEach((a) => used.add(a.chofer)); } });
+  Object.values(S.col.absences).forEach((a) => { if (!a._d) used.add(a.personId); });
+  C.dropP.forEach((id) => { if (live('people', id) && !used.has(id)) S.col.people[id] = { id, _d: 1, _u: now }; });
+  if (live('people', 'p-eulalio')) { const e = S.col.people['p-eulalio']; if (!e.puesto) { e.puesto = 'Chofer'; e._u = now; } }
+  localStorage.setItem(LS_MIG, '5');
+  persist();
 }
 
 /* ---------------- Días ---------------- */
@@ -469,7 +506,7 @@ function viewParams() {
   if (t === 'camiones') {
     body = `<div class="sec-h"><h2>Camiones</h2><button class="btn sm dark" data-act="truck-new">+ Camión</button></div>
     <div class="tbl-wrap"><table class="tbl"><tr><th>Número / nombre</th><th>Matrícula</th><th style="text-align:right">Capacidad máx. (parrillas)</th><th>Chofer asignado</th><th>Uso</th></tr>
-    ${trucks().map((x) => `<tr class="click" data-act="truck-edit" data-id="${x.id}"><td><b>${esc(x.nombre)}</b></td><td class="mono">${esc(x.matricula || '—')}</td><td style="text-align:right"><b>${esc(x.capacidad || '—')}</b></td>
+    ${trucks().map((x) => `<tr class="click" data-act="truck-edit" data-id="${x.id}"><td><b>${esc(x.nombre)}</b>${x.nota ? `<div class="small muted">${esc(x.nota)}</div>` : ''}</td><td class="mono">${esc(x.matricula || '—')}</td><td style="text-align:right"><b>${esc(x.capacidad || '—')}</b></td>
       <td>${x.choferModo === 'varios' ? `<span class="tag navy">VARIOS</span> <span class="muted">${esc((x.choferes || []).map(pname).join(', '))}</span>` : esc(x.chofer ? pname(x.chofer) : '—')}</td>
       <td class="muted">${esc((x.uso || []).map((u) => ({ rutas: 'Rutas', z18: 'Z18', apoyo: 'Apoyo' }[u])).join(' · '))}</td></tr>`).join('')}</table></div>`;
   } else if (t === 'personal') {
@@ -478,7 +515,7 @@ function viewParams() {
     const absT = absentIds(todayISO());
     body = `<div class="sec-h"><h2>Colaboradores <span class="small muted">· ${activePeople().length} activos</span></h2>
       <div class="row">${[['todos', 'Todos'], ['chofer', 'Choferes'], ['ayudante', 'Ayudantes'], ['otro', 'Otros']].map(([k, l]) => `<button class="tab ${f === k ? 'on' : ''}" data-act="pf" data-k="${k}">${l}</button>`).join('')}<button class="btn sm dark" data-act="person-new">+ Colaborador</button></div></div>
-      <div class="pgrid">${list.map((p) => { const a = absencesOn(todayISO()).find((x) => x.personId === p.id && absT.has(p.id)); return `<button class="pcard ${p.activo === false ? 'inactive' : ''}" data-act="person-edit" data-id="${p.id}"><div class="row" style="justify-content:space-between;width:100%"><b>${esc(p.nombre)}</b>${a ? `<span class="pill t-${a.tipo}">${TIPOS[a.tipo].label}</span>` : ''}</div><span class="role ${p.rol}">${esc(roleLabel(p))}</span><span class="small muted">${p.tarjeta ? 'Tarjeta ' + esc(p.tarjeta) : 'Sin tarjeta'}${p.area ? ' · ' + esc(p.area) : ''}</span></button>`; }).join('')}</div>`;
+      <div class="pgrid">${list.map((p) => { const a = absencesOn(todayISO()).find((x) => x.personId === p.id && absT.has(p.id)); return `<button class="pcard ${p.activo === false ? 'inactive' : ''}" data-act="person-edit" data-id="${p.id}"><div class="row" style="justify-content:space-between;width:100%"><b>${esc(p.nombre)}</b>${a ? `<span class="pill t-${a.tipo}">${TIPOS[a.tipo].label}</span>` : ''}</div><span class="role ${p.rol}">${esc(roleLabel(p))}</span><span class="small muted">${p.tarjeta ? 'Tarjeta ' + esc(p.tarjeta) : 'Sin tarjeta'}${p.rol !== 'otro' && p.puesto && p.puesto !== ROLES[p.rol] ? ' · ' + esc(p.puesto) : ''}${p.area ? ' · ' + esc(p.area) : ''}</span></button>`; }).join('')}</div>`;
   } else if (t === 'clientes') {
     body = `<div class="sec-h"><h2>Clientes</h2><button class="btn sm dark" data-act="client-new">+ Cliente</button></div>
       <div class="tbl-wrap"><table class="tbl"><tr><th>Cliente</th><th>Registra parrillas</th><th>Estado</th></tr>${all('clients').sort(byName).map((c) => `<tr class="click" data-act="client-edit" data-id="${c.id}"><td><b>${esc(c.nombre)}</b></td><td>${c.usaParrillas ? 'Sí' : '—'}</td><td>${c.activo === false ? 'Inactivo' : 'Activo'}</td></tr>`).join('')}</table></div>`;
@@ -684,7 +721,7 @@ function waText(a) {
   const h = a.hasta || a.desde, n = diffDays(a.desde, h) + 1;
   const L = ['*' + waTitle(a) + '*', 'Colaborador: ' + (p.nombre || '—')];
   if (p.tarjeta) L.push('Tarjeta: ' + p.tarjeta);
-  if (p.rol) L.push('Puesto: ' + roleLabel(p) + (p.area ? ' (' + p.area + ')' : ''));
+  if (p.rol) L.push('Puesto: ' + puestoOf(p) + (p.area ? ' (' + p.area + ')' : ''));
   if (n === 1) L.push('Fecha: ' + DIAS[dow(a.desde)].toLowerCase() + ' ' + fmtLong(a.desde));
   else L.push('Del ' + DIAS[dow(a.desde)].toLowerCase() + ' ' + fmtLong(a.desde) + ' al ' + DIAS[dow(h)].toLowerCase() + ' ' + fmtLong(h) + ' (' + n + ' días)');
   if (a.tipo === 'vacaciones' && a.estado === 'solicitada') L.push('Fechas aproximadas, pendientes de confirmar por RRHH');
@@ -738,6 +775,7 @@ function drawTruck() {
   modal(`<h2>${isNew ? 'Nuevo camión' : 'Editar camión: ' + esc(t.nombre)}</h2>
     <div class="grid2"><div class="field"><label for="t-n">Número o nombre</label><input id="t-n" class="inp" value="${esc(t.nombre)}" data-tchange="nombre"></div>
     <div class="field"><label for="t-m">Matrícula</label><input id="t-m" class="inp" value="${esc(t.matricula)}" data-tchange="matricula" style="text-transform:uppercase"></div></div>
+    <div class="field"><label for="t-o">Nota</label><input id="t-o" class="inp" value="${esc(t.nota || '')}" data-tchange="nota"></div>
     <div class="field"><label for="t-c">Capacidad máxima (parrillas)</label><input id="t-c" class="inp" inputmode="numeric" style="max-width:160px" value="${esc(t.capacidad)}" data-tchange="capacidad"></div>
     <div class="field"><span class="flabel">Uso</span><div class="chips">${[['rutas', 'Rutas'], ['z18', 'Z18 (viajes fijos)'], ['apoyo', 'Apoyo']].map(([k, l]) => `<button type="button" class="chip ${(t.uso || []).includes(k) ? 'on' : ''}" data-tact="uso" data-k="${k}">${l}</button>`).join('')}</div></div>
     <div class="field"><span class="flabel">Chofer asignado</span><div class="seg"><button type="button" class="btn ${t.choferModo !== 'varios' ? 'navy' : ''}" data-tact="modo" data-k="fijo">Chofer fijo</button><button type="button" class="btn ${t.choferModo === 'varios' ? 'navy' : ''}" data-tact="modo" data-k="varios">Varios</button></div></div>
@@ -772,7 +810,7 @@ function drawSimple() {
   const tog = (k, l, a, b) => `<div class="field"><span class="flabel">${l}</span><div class="seg"><button type="button" class="btn ${r[k] ? 'navy' : ''}" data-sact="set" data-k="${k}" data-v="1">${a}</button><button type="button" class="btn ${!r[k] ? 'navy' : ''}" data-sact="set" data-k="${k}" data-v="">${b}</button></div></div>`;
   if (sk === 'person') f = inp('nombre', 'Nombre') + inp('tarjeta', 'Número de tarjeta', 'text', 'inputmode="numeric" autocomplete="off"')
     + `<div class="field"><span class="flabel">Rol</span><div class="chips">${Object.entries(ROLES).map(([k, l]) => `<button type="button" class="chip ${r.rol === k ? 'on' : ''}" data-sact="rol" data-k="${k}">${l}</button>`).join('')}</div></div>`
-    + (r.rol === 'otro' ? inp('puesto', 'Puesto (empacador, verificadora…)', 'text', 'list="puestos"') + `<datalist id="puestos">${PUESTOS.map((x) => `<option value="${x}">`).join('')}</datalist>` : '')
+    + inp('puesto', r.rol === 'otro' ? 'Puesto (empacador, verificadora…)' : 'Puesto (opcional)', 'text', 'list="puestos"') + `<datalist id="puestos">${[...new Set([...PUESTOS, ...all('people').map((x) => x.puesto).filter(Boolean)])].sort().map((x) => `<option value="${esc(x)}">`).join('')}</datalist>`
     + inp('area', 'Área') + tog('activo', 'Estado', 'Activo', 'Inactivo');
   if (sk === 'client') f = inp('nombre', 'Nombre') + tog('usaParrillas', 'Registra parrillas del pedido', 'Sí', 'No') + tog('activo', 'Estado', 'Activo', 'Inactivo');
   if (sk === 'prod') f = inp('codigo', 'Código') + inp('desc', 'Descripción (opcional)') + inp('orden', 'Orden en la lista', 'number');
@@ -790,7 +828,7 @@ function simpleAction(act, el) {
     else if (!String(r.nombre).trim()) return toast('Escribe el nombre');
     if (sk === 'hol' && !r.fecha) return toast('Elige la fecha');
     if (r.nombre) r.nombre = r.nombre.trim();
-    if (sk === 'person') { r.tarjeta = String(r.tarjeta || '').trim(); if (r.rol !== 'otro') r.puesto = ''; }
+    if (sk === 'person') { r.tarjeta = String(r.tarjeta || '').trim(); r.puesto = String(r.puesto || '').trim(); }
     put(def.col, r); closeModal(); render(); return;
   }
   drawSimple();
@@ -1008,6 +1046,7 @@ function printAgenda(year, month) {
 /* ---------------- Inicio ---------------- */
 function start() {
   seed();
+  migrateV5();
   render();
   if (localStorage.getItem(LS_KEY)) syncNow();
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('/sw.js').catch(() => {});

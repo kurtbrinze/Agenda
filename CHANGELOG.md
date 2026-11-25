@@ -2,6 +2,11 @@
 
 La versión visible en la app está en `js/app.js` (`VERSION` y `CHANGELOG`). Cada actualización sube la versión.
 
+## V.5 — 2026-11-25
+- Carga inicial desde Excel (`js/carga-inicial.js`): 86 colaboradores con tarjeta y puesto principal; 45 camiones con matrícula, capacidad en parrillas y chofer (o “Varios”).
+- Los colaboradores y camiones de ejemplo se reemplazan por los del Excel y se actualizan sus referencias en días y ausencias.
+- Campo “Puesto” para todos los roles y “Nota” en camiones.
+
 ## V.4 — 2026-11-25
 - Aviso por WhatsApp (opción A): al autorizar un permiso o confirmar vacaciones se abre el mensaje listo para compartir a los chats; también desde cualquier ausencia. Queda registrado como “enviado”.
 - Número de tarjeta del colaborador en Parámetros; aparece en ausencias y en el mensaje.
