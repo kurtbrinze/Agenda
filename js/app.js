@@ -2,8 +2,9 @@
 (function () {
 'use strict';
 
-const VERSION = 'V.12';
+const VERSION = 'V.13';
 const CHANGELOG = [
+  ['V.13', '2026-11-25', 'Centro de Control: al abrir la Agenda dentro del centro trae lo último de la nube. Si ahí no está activa la sincronización, muestra un aviso para activarla y no trabajar solo en ese equipo.'],
   ['V.12', '2026-11-25', 'Tabla de camiones en Parámetros ordenada de mayor a menor capacidad de parrillas.'],
   ['V.11', '2026-11-25', 'Al programar rutas, choferes y ayudantes ya asignados ese día (rutas, otro camión o apoyo Z18) o con falta, permiso, vacaciones o IGSS aparecen tachados y no se pueden elegir.'],
   ['V.10', '2026-11-25', 'Al programar rutas, los camiones se listan de mayor a menor capacidad de parrillas.'],
@@ -1201,7 +1202,40 @@ function updateSyncUI() {
   }
   document.querySelectorAll('[data-syncdot]').forEach((d) => (d.className = 'dot ' + cls));
   document.querySelectorAll('[data-synctext]').forEach((d) => (d.textContent = txt));
+  avisoCentro();
 }
+
+/* ---------------- Centro de Control ----------------
+   Dentro del Centro de Control la Agenda corre en un marco, y el navegador le
+   da un almacenamiento aparte: no ve la clave ni los datos de la Agenda
+   abierta sola. Sin clave, lo que se escriba ahí se quedaría solo en ese
+   marco. Por eso, dentro del centro y sin clave, se muestra un aviso fijo. */
+const EMBEBIDA = (() => { try { return window.self !== window.top; } catch (_) { return true; } })();
+function avisoCentro() {
+  let b = document.getElementById('aviso-centro');
+  const falta = EMBEBIDA && !localStorage.getItem(LS_KEY);
+  if (!falta) { if (b) b.remove(); return; }
+  if (b) return;
+  b = document.createElement('div');
+  b.id = 'aviso-centro';
+  b.setAttribute('role', 'alert');
+  b.style.cssText = 'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:9999;display:flex;align-items:center;gap:12px;max-width:calc(100% - 24px);padding:10px 12px 10px 16px;border-radius:12px;background:#3a2a06;border:1px solid #f5b301;color:#ffe9a8;font-size:13px;line-height:1.4;box-shadow:0 6px 24px rgba(0,0,0,.35)';
+  b.innerHTML = '<span>Sincronización apagada dentro del Centro de Control. Lo que guardes aquí no llegará a tus otros equipos.</span>';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.textContent = 'Activar';
+  btn.style.cssText = 'flex:none;padding:7px 14px;border-radius:8px;border:0;background:#f5b301;color:#2a1d00;font-weight:600;cursor:pointer';
+  btn.onclick = () => { go('ajustes'); setTimeout(() => { const i = document.getElementById('sync-key'); if (i) i.focus(); }, 50); };
+  b.appendChild(btn);
+  document.body.appendChild(b);
+}
+/* El centro avisa cada vez que vuelve a mostrar la Agenda: es el momento de
+   traer lo que otro equipo dejó. Dentro del centro no hay visibilitychange al
+   cambiar de app, porque el marco sigue abierto. */
+window.addEventListener('message', (ev) => {
+  if (!ev.data || ev.data.tipo !== 'cc:mostrar') return;
+  if (localStorage.getItem(LS_KEY)) syncNow(); else avisoCentro();
+});
 window.addEventListener('online', () => { syncErr = false; syncNow(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncNow(); });
 

@@ -2,6 +2,10 @@
 
 La versión visible en la app está en `js/app.js` (`VERSION` y `CHANGELOG`). Cada actualización sube la versión.
 
+## V.13 — 2026-11-25
+- Centro de Control: cuando la Agenda se abre o se vuelve a mostrar dentro del centro, trae lo último de la nube.
+- Dentro del centro, si la sincronización no está activa, aparece un aviso fijo con el botón «Activar», porque ahí el navegador guarda los datos aparte de la Agenda abierta sola.
+
 ## V.12 — 2026-11-25
 - Parámetros → Camiones: tabla ordenada de mayor a menor capacidad de parrillas (sin capacidad al final).
 
