@@ -2,8 +2,9 @@
 (function () {
 'use strict';
 
-const VERSION = 'V.2';
+const VERSION = 'V.3';
 const CHANGELOG = [
+  ['V.3', '2026-11-25', 'Sincronización compatible con el almacenamiento Blob conectado por OIDC.'],
   ['V.2', '2026-11-25', 'Logo oficial de Rinze Studio y registro de versiones en Ajustes.'],
   ['V.1', '2026-11-25', 'Primera versión: día tipo libreta, rutas, empaques, Z18, ausencias, semana, calendario, consultas, parámetros, PDF, respaldo y sincronización.'],
 ];

@@ -1,5 +1,6 @@
 // Sincronización de la Agenda: guarda el estado en Vercel Blob.
 // Cada clave de sincronización tiene su propio espacio (hash SHA-256 de la clave).
+// Credenciales: OIDC de Vercel + BLOB_STORE_ID (o BLOB_READ_WRITE_TOKEN), resueltas por @vercel/blob.
 import { put, list, del } from '@vercel/blob';
 import { createHash } from 'node:crypto';
 
@@ -30,7 +31,6 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   const key = String(req.headers['x-agenda-key'] || '');
   if (key.length < 8) return res.status(401).json({ error: 'Clave inválida' });
-  if (!process.env.BLOB_READ_WRITE_TOKEN) return res.status(500).json({ error: 'Almacenamiento no configurado' });
   const ns = createHash('sha256').update('agenda:' + key).digest('hex');
   const prefix = `agenda/${ns}/`;
   try {
@@ -58,6 +58,6 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Método no permitido' });
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ error: 'Error de almacenamiento' });
+    return res.status(500).json({ error: 'Error de almacenamiento', detalle: String(e && e.message || e).slice(0, 200) });
   }
 }
