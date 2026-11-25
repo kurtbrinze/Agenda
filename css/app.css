@@ -34,9 +34,8 @@ h1,h2,h3{letter-spacing:-.01em;margin:0}
 .bottomnav{display:none}
 
 /* Rinze pill */
-.rinze{display:inline-flex;align-items:center;gap:5px;background:#0A0E17;border-radius:12px;padding:3px 9px 3px 5px;text-decoration:none;align-self:flex-start}
-.rinze span{font-size:10px;font-weight:700;color:#E6FFF4}
-.rinze small{font-weight:500;color:#7FE9FF;font-size:8px;letter-spacing:.12em}
+.rinze{display:inline-flex;align-items:center;background:#0A0E17;border-radius:8px;padding:2px 6px;align-self:flex-start;line-height:0}
+.rinze svg{display:block}
 
 /* Sync status */
 .sync{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);background:none;border:0;padding:0;cursor:pointer}
@@ -194,6 +193,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:14px}
   .topbar{display:flex;justify-content:space-between;align-items:center;background:var(--bar);padding:10px 14px;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5;padding-top:max(10px,env(safe-area-inset-top))}
   .topbar .brand{padding:0;gap:8px}
   .topbar .brand b{font-size:15px}
+  .topbar .version{font-size:10px}
   .view{padding:12px 12px 100px}
   .bottomnav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));position:fixed;left:0;right:0;bottom:0;background:var(--bar);border-top:1px solid var(--line);padding:4px 4px max(8px,env(safe-area-inset-bottom));z-index:10}
   .bn-item{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 0;border:0;background:none;color:var(--muted);font-size:11px;cursor:pointer}

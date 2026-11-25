@@ -2,7 +2,11 @@
 (function () {
 'use strict';
 
-const VERSION = 'V.1';
+const VERSION = 'V.2';
+const CHANGELOG = [
+  ['V.2', '2026-11-25', 'Logo oficial de Rinze Studio y registro de versiones en Ajustes.'],
+  ['V.1', '2026-11-25', 'Primera versión: día tipo libreta, rutas, empaques, Z18, ausencias, semana, calendario, consultas, parámetros, PDF, respaldo y sincronización.'],
+];
 const LS_STATE = 'agenda.state.v1';
 const LS_KEY = 'agenda.syncKey';
 const LS_PENDING = 'agenda.pending';
@@ -77,7 +81,18 @@ const I = {
 const ic = (n) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[n]}</svg>`;
 const appIcon = (s) => `<svg width="${s}" height="${s}" viewBox="0 0 48 48" aria-hidden="true"><rect width="48" height="48" rx="11" fill="#1B2A4A"/><rect x="14" y="9" width="23" height="30" rx="3" fill="#F3EAD6"/><path d="M19 17h13M19 22h13M19 27h9" stroke="#1B2A4A" stroke-width="2" stroke-linecap="round"/><path d="M11 14h6M11 20h6M11 26h6M11 32h6" stroke="#C9B98F" stroke-width="2.4" stroke-linecap="round"/></svg>`;
 let rzN = 0;
-const rinze = () => { const g = 'rz' + (rzN++); return `<span class="rinze" title="Rinze Studio"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="${g}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#00FF88"/><stop offset="1" stop-color="#00D2FE"/></linearGradient></defs><path d="M6 20V4h8a4 4 0 0 1 0 8H6M12 12l6 8" fill="none" stroke="url(#${g})" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><g fill="url(#${g})"><circle cx="6" cy="4" r="2"/><circle cx="6" cy="20" r="2"/><circle cx="6" cy="12" r="2"/><circle cx="18" cy="20" r="2"/></g></svg><span>Rinze <small>STUDIO</small></span></span>`; };
+/* Logo oficial Rinze Studio (icons/rinze-studio.svg) */
+const rinze = (h = 22) => {
+  const g = 'rzg' + rzN, t = 'rzt' + rzN, f = 'rzf' + (rzN++);
+  const st = `fill="none" stroke="url(#${g})" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"`;
+  return `<span class="rinze" title="Rinze Studio"><svg role="img" aria-label="Rinze Studio" height="${h}" width="${Math.round(h * 920 / 320)}" viewBox="0 0 920 320"><defs>
+<linearGradient id="${g}" x1="10%" y1="10%" x2="90%" y2="90%"><stop offset="0%" stop-color="#68FF6B"/><stop offset="45%" stop-color="#00FF88"/><stop offset="100%" stop-color="#00C4FF"/></linearGradient>
+<linearGradient id="${t}" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#68FF6B"/><stop offset="100%" stop-color="#4ADE80"/></linearGradient>
+<filter id="${f}" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="5" result="blur"/><feComposite in="SourceGraphic" in2="blur" operator="over"/></filter></defs>
+<g transform="translate(55,45)" filter="url(#${f})"><path d="M35 25L135 25A68 68 0 0 1 135 161L122 161L195 235L152 235L88 168L58 168L58 235L35 235L35 142L85 142" ${st}/><path d="M85 68L132 68A26 26 0 0 1 132 120L95 120" ${st}/><path d="M35 102L35 25L85 142" ${st}/>
+<g fill="url(#${g})"><circle cx="35" cy="25" r="13"/><circle cx="85" cy="68" r="12"/><circle cx="85" cy="142" r="12"/><circle cx="122" cy="161" r="12"/><circle cx="35" cy="235" r="13"/><circle cx="195" cy="235" r="13"/></g></g>
+<g transform="translate(315,45)" font-family="Inter,-apple-system,'Segoe UI',Roboto,sans-serif"><text x="0" y="138" font-size="136" font-weight="600" fill="#FFFFFF" letter-spacing="-2">Rinze</text><text x="6" y="218" font-size="52" font-weight="500" fill="url(#${t})" letter-spacing="22">STUDIO</text></g></svg></span>`;
+};
 
 /* ---------------- Estado ---------------- */
 function emptyState() { const c = {}; COLS.forEach((k) => (c[k] = {})); return { v: 1, col: c }; }
@@ -191,8 +206,8 @@ function renderShell() {
   $('#sidebar').innerHTML = `
     <div class="brand">${appIcon(36)}<b>Agenda</b></div>
     ${NAV.map(([k, l, i]) => `<button class="nav-item ${ui.view === k ? 'active' : ''}" data-nav="${k}">${ic(i)}${l}</button>`).join('')}
-    <div class="side-foot">${rinze()}<button class="sync" data-act="sync-now"><span class="dot" data-syncdot></span><span data-synctext></span></button><span class="version">Agenda ${VERSION}</span></div>`;
-  $('#topbar').innerHTML = `<div class="brand">${appIcon(26)}<b>Agenda</b><button class="sync" data-act="sync-now" aria-label="Estado de sincronización"><span class="dot" data-syncdot></span></button></div>${rinze()}`;
+    <div class="side-foot">${rinze(30)}<button class="sync" data-act="sync-now"><span class="dot" data-syncdot></span><span data-synctext></span></button><span class="version">Agenda ${VERSION}</span></div>`;
+  $('#topbar').innerHTML = `<div class="brand">${appIcon(26)}<b>Agenda</b><span class="version">${VERSION}</span><button class="sync" data-act="sync-now" aria-label="Estado de sincronización"><span class="dot" data-syncdot></span></button></div>${rinze(22)}`;
   const bn = [['dia', 'Hoy', 'book'], ['semana', 'Semana', 'week'], ['ausencias', 'Ausencias', 'cal'], ['consultas', 'Consultas', 'search'], ['mas', 'Más', 'more']];
   $('#bottomnav').innerHTML = bn.map(([k, l, i]) => `<button class="bn-item ${ui.view === k || (k === 'mas' && ['parametros', 'ajustes'].includes(ui.view)) ? 'active' : ''}" data-nav="${k}">${ic(i)}${l}</button>`).join('');
   updateSyncUI();
@@ -478,7 +493,7 @@ function viewSettings() {
   const key = localStorage.getItem(LS_KEY) || '';
   const last = localStorage.getItem(LS_LASTSYNC);
   const y = String(new Date().getFullYear());
-  return `<div class="dayhead"><div><div class="dtitle">Ajustes y PDF</div><div class="dsub">Agenda ${VERSION}</div></div></div>
+  return `<div class="dayhead"><div><div class="dtitle">Ajustes y PDF</div><div class="dsub">Agenda <b>${VERSION}</b></div></div></div>
   <div class="panel"><h2 style="font-size:16px">Sincronización entre laptop y celular</h2>
     <div class="hint">Usa la <b>misma clave</b> en cada equipo. Los datos se guardan en tu equipo y se copian a la nube de tu proyecto en Vercel. Mínimo 8 caracteres; no la compartas.</div>
     <div class="row"><input class="inp" id="sync-key" type="password" style="max-width:320px" placeholder="Clave de sincronización" value="${esc(key)}" autocomplete="new-password" aria-label="Clave de sincronización">
@@ -502,7 +517,9 @@ function viewSettings() {
     <div class="hint">Borra los datos guardados en este equipo. Si la sincronización está activa, los datos en la nube no se borran y vuelven a descargarse.</div>
     <div class="row"><button class="btn danger" data-act="reset">Borrar datos de este equipo</button></div>
   </div>
-  <div class="row small muted" style="gap:10px">${rinze()} Agenda ${VERSION}</div>`;
+  <div class="panel"><h2 style="font-size:16px">Versiones</h2>
+    <div class="tbl-wrap"><table class="tbl"><tr><th>Versión</th><th>Fecha</th><th>Cambios</th></tr>${CHANGELOG.map(([v, f, t]) => `<tr><td><b>${v}</b>${v === VERSION ? ' <span class="pill t-permiso">actual</span>' : ''}</td><td>${fmtShort(f)} ${f.slice(0, 4)}</td><td>${esc(t)}</td></tr>`).join('')}</table></div></div>
+  <div class="row small muted" style="gap:10px">${rinze(28)} Agenda ${VERSION}</div>`;
 }
 
 function openMoreMenu() {
