@@ -2,8 +2,9 @@
 (function () {
 'use strict';
 
-const VERSION = 'V.9';
+const VERSION = 'V.10';
 const CHANGELOG = [
+  ['V.10', '2026-11-25', 'Al programar rutas, los camiones se listan de mayor a menor capacidad de parrillas.'],
   ['V.9', '2026-11-25', 'Traslados Z18 en orden fijo: GMC, AXEL, GRANDE (otros camiones de Z18 después).'],
   ['V.8', '2026-11-25', 'Selector de camión en columnas (camión y matrícula, chofer asignado, parrillas) con buscador al programar rutas.'],
   ['V.7', '2026-11-25', 'Plantillas de mensajes de WhatsApp por tipo de ausencia, con variables y vista previa (Ajustes).'],
@@ -686,7 +687,7 @@ function drawRuta() {
   const need = trucksNeeded(r);
   const choferes = activePeople().filter(isChofer);
   const ayud = activePeople().filter(isAyud);
-  const tr = trucks().filter((t) => (truckOn(t) && (!(t.uso || []).length || (t.uso || []).includes('rutas') || (t.uso || []).includes('apoyo'))) || r.camiones.some((c) => c.truck === t.id));
+  const tr = trucks().sort((a, b) => (+b.capacidad || 0) - (+a.capacidad || 0) || String(a.nombre).localeCompare(String(b.nombre), 'es', { numeric: true })).filter((t) => (truckOn(t) && (!(t.uso || []).length || (t.uso || []).includes('rutas') || (t.uso || []).includes('apoyo'))) || r.camiones.some((c) => c.truck === t.id));
   const used = assignedElsewhere(idx);
   const usedT = trucksElsewhere(idx);
   const camH = r.camiones.map((c, ci) => {
@@ -719,7 +720,7 @@ function truckChofer(t) {
   return t.chofer ? esc(pname(t.chofer)) : '<span class="muted">—</span>';
 }
 function truckCols(t, usedT) {
-  return `<span class="tc-name"><b>${esc(t.nombre)}</b>${t.matricula && t.matricula !== t.nombre ? `<small class="mono">${esc(t.matricula)}</small>` : ''}${usedT && usedT.has(t.id) ? '<small class="t-falta">en otra ruta</small>' : ''}</span><span class="tc-chofer">${truckChofer(t)}</span><span class="tc-parr">${t.capacidad ? '<b>' + esc(t.capacidad) + '</b><small>parr.</small>' : '<span class="muted">—</span>'}</span>`;
+  return `<span class="tc-name"><b>${esc(t.nombre)}</b>${t.matricula && !String(t.nombre).includes(t.matricula) ? `<small class="mono">${esc(t.matricula)}</small>` : ''}${usedT && usedT.has(t.id) ? '<small class="t-falta">en otra ruta</small>' : ''}</span><span class="tc-chofer">${truckChofer(t)}</span><span class="tc-parr">${t.capacidad ? '<b>' + esc(t.capacidad) + '</b><small>parr.</small>' : '<span class="muted">—</span>'}</span>`;
 }
 function truckPicker(ci, tr, current, usedT) {
   return `<div class="tpick" role="listbox" aria-label="Camiones">

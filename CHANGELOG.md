@@ -2,6 +2,9 @@
 
 La versión visible en la app está en `js/app.js` (`VERSION` y `CHANGELOG`). Cada actualización sube la versión.
 
+## V.10 — 2026-11-25
+- Selector de camión al programar rutas ordenado de mayor a menor capacidad de parrillas (sin capacidad, al final).
+
 ## V.9 — 2026-11-25
 - Traslados Z18 siempre en el orden GMC, AXEL, GRANDE (en el día, la semana y el PDF).
 
