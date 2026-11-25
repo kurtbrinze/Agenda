@@ -2,6 +2,12 @@
 
 La versión visible en la app está en `js/app.js` (`VERSION` y `CHANGELOG`). Cada actualización sube la versión.
 
+## V.13 — 2026-11-25
+- Reuniones en el día: presenciales (lugar) o virtuales (plataforma, enlace, ID y código de acceso). Botón “Unirse”, copiar datos y “Agregar a mi calendario” (.ics con aviso 15 min antes).
+- “Pegar invitación”: lee el texto de Teams, Zoom, Meet o Webex y llena enlace, ID y código.
+- Reuniones en la vista de semana, en el PDF y en Consultas → Reuniones (próximas y búsqueda).
+- La sincronización incluye las reuniones (`api/sync.js`).
+
 ## V.12 — 2026-11-25
 - Parámetros → Camiones: tabla ordenada de mayor a menor capacidad de parrillas (sin capacidad al final).
 

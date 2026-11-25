@@ -4,7 +4,7 @@
 import { put, list, del } from '@vercel/blob';
 import { createHash } from 'node:crypto';
 
-const COLS = ['people', 'trucks', 'clients', 'products', 'holidays', 'absences', 'days', 'templates'];
+const COLS = ['people', 'trucks', 'clients', 'products', 'holidays', 'absences', 'days', 'templates', 'meetings'];
 
 function mergeCols(a, b) {
   const out = {};

@@ -2,8 +2,9 @@
 (function () {
 'use strict';
 
-const VERSION = 'V.12';
+const VERSION = 'V.13';
 const CHANGELOG = [
+  ['V.13', '2026-11-25', 'Reuniones presenciales o virtuales: hora, lugar o enlace, ID y código de acceso; lectura automática de la invitación, botón Unirse, copiar datos, agregar al calendario (.ics) y consulta de reuniones.'],
   ['V.12', '2026-11-25', 'Tabla de camiones en Parámetros ordenada de mayor a menor capacidad de parrillas.'],
   ['V.11', '2026-11-25', 'Al programar rutas, choferes y ayudantes ya asignados ese día (rutas, otro camión o apoyo Z18) o con falta, permiso, vacaciones o IGSS aparecen tachados y no se pueden elegir.'],
   ['V.10', '2026-11-25', 'Al programar rutas, los camiones se listan de mayor a menor capacidad de parrillas.'],
@@ -21,7 +22,7 @@ const LS_STATE = 'agenda.state.v1';
 const LS_KEY = 'agenda.syncKey';
 const LS_PENDING = 'agenda.pending';
 const LS_LASTSYNC = 'agenda.lastSync';
-const COLS = ['people', 'trucks', 'clients', 'products', 'holidays', 'absences', 'days', 'templates'];
+const COLS = ['people', 'trucks', 'clients', 'products', 'holidays', 'absences', 'days', 'templates', 'meetings'];
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -412,6 +413,8 @@ function viewDay() {
         <div class="row"><button class="btn" data-act="nota-add">Agregar nota</button></div></section>
     </div>
     <div class="col">
+      <section class="sec"><div class="sec-h"><h2>Reuniones</h2><button class="btn sm" data-act="mtg-new">+ Reunión</button></div>
+        ${meetingsOn(iso).map(meetingCard).join('') || '<div class="empty">Sin reuniones.</div>'}</section>
       <section class="sec"><div class="sec-h"><h2>Z18 · traslados Z2 ↔ Z18</h2></div>
         ${z18 ? `<div class="z18grid">${z18}</div>` : '<div class="empty">Marca camiones con uso “Z18” en Parámetros.</div>'}
         <div class="sec-h"><span class="flabel">APOYO</span><button class="btn sm" data-act="apo-add">+ Apoyo</button></div>
@@ -457,6 +460,7 @@ function viewWeek() {
       ${rutas ? '<span class="lbl">RUTAS</span>' + rutas : (off ? '<span>Sin despacho</span>' : '<span class="muted">Sin rutas</span>')}
       ${emp ? '<span class="lbl">EMPAQUES</span><div>' + emp + '</div>' : ''}
       ${z ? '<span class="lbl">Z18</span><div>' + z + '</div>' : ''}
+      ${meetingsOn(iso).length ? '<span class="lbl">REUNIONES</span>' + meetingsOn(iso).map((m) => `<div>${esc(m.hora || '')} ${esc(m.titulo)}${m.modalidad === 'virtual' ? ' · virtual' : ''}</div>`).join('') : ''}
       ${abs.length ? '<span class="lbl">AUSENCIAS</span>' + abs.map((a) => `<div class="t-${a.tipo}">${esc(pname(a.personId))} · ${TIPOS[a.tipo].label}</div>`).join('') : ''}
     </button>`;
   }).join('');
@@ -505,7 +509,7 @@ function viewAbsences() {
 /* ---------------- Vista: Consultas ---------------- */
 function viewQueries() {
   const q = ui.q;
-  const tabs = [['colaborador', 'Por colaborador'], ['cliente', 'Por cliente'], ['ausencias', 'Ausencias por fecha'], ['notas', 'Buscar en notas']];
+  const tabs = [['colaborador', 'Por colaborador'], ['cliente', 'Por cliente'], ['ausencias', 'Ausencias por fecha'], ['reuniones', 'Reuniones'], ['notas', 'Buscar en notas']];
   let body = '';
   if (q.tipo === 'colaborador') {
     const years = yearsAvailable();
@@ -536,6 +540,13 @@ function viewQueries() {
   } else if (q.tipo === 'ausencias') {
     const res = all('absences').filter((a) => a.desde <= q.hasta && (a.hasta || a.desde) >= q.desde).sort((a, b) => a.desde.localeCompare(b.desde));
     body = `<div class="row">${rangeInputs()}</div>${res.length ? `<div class="tbl-wrap"><table class="tbl"><tr><th>Colaborador</th><th>Tipo</th><th>Fechas</th><th>Motivo</th></tr>${res.map((a) => `<tr class="click" data-act="abs-edit" data-id="${a.id}"><td><b>${esc(pname(a.personId))}</b></td><td class="t-${a.tipo}">${TIPOS[a.tipo].label}${a.tipo === 'vacaciones' && a.estado === 'solicitada' ? ' (aprox.)' : ''}</td><td>${fmtRange(a.desde, a.hasta)}</td><td>${esc(a.motivo || '')}</td></tr>`).join('')}</table></div>` : '<div class="empty">Sin ausencias en el rango.</div>'}`;
+  } else if (q.tipo === 'reuniones') {
+    const t = norm(q.text);
+    const res = all('meetings').filter((m) => m.fecha >= q.desde && m.fecha <= q.hasta && (!t || norm([m.titulo, m.lugar, m.plataforma, m.notas].join(' ')).includes(t))).sort((a, b) => (a.fecha + (a.hora || '')).localeCompare(b.fecha + (b.hora || '')));
+    const prox = all('meetings').filter((m) => m.fecha >= todayISO()).sort((a, b) => (a.fecha + (a.hora || '')).localeCompare(b.fecha + (b.hora || ''))).slice(0, 5);
+    body = `${prox.length ? `<h3 style="font-size:15px">Próximas</h3>${prox.map((m) => `<div class="row"><b style="min-width:110px">${DIAS_C[dow(m.fecha)]} ${fmtShort(m.fecha)}</b>${meetingCard(m)}</div>`).join('')}` : ''}
+      <h3 style="font-size:15px">Buscar</h3><div class="row"><input class="inp" style="max-width:280px" placeholder="Título, lugar, plataforma…" value="${esc(q.text)}" data-change="q-text" aria-label="Buscar reunión">${rangeInputs()}</div>
+      ${res.length ? `<div class="tbl-wrap"><table class="tbl"><tr><th>Fecha</th><th>Hora</th><th>Reunión</th><th>Modalidad</th></tr>${res.map((m) => `<tr class="click" data-act="mtg-edit" data-id="${m.id}"><td>${DIAS_C[dow(m.fecha)]} ${fmtShort(m.fecha)}</td><td>${esc(mtgHoras(m))}</td><td><b>${esc(m.titulo)}</b></td><td>${m.modalidad === 'virtual' ? 'Virtual · ' + esc(m.plataforma || '') : 'Presencial' + (m.lugar ? ' · ' + esc(m.lugar) : '')}</td></tr>`).join('')}</table></div>` : '<div class="empty">Sin reuniones en el rango.</div>'}`;
   } else {
     const t = q.text.trim().toLowerCase();
     const res = t ? all('days').flatMap((d) => d.notas.filter((n) => n.texto.toLowerCase().includes(t)).map((n) => ({ d: d.id, n }))).sort((a, b) => b.d.localeCompare(a.d)) : [];
@@ -843,6 +854,99 @@ function absAction(act, el) {
   }
 }
 
+/* Reuniones */
+const PLATAFORMAS = ['Microsoft Teams', 'Zoom', 'Google Meet', 'Webex', 'Otra'];
+function meetingsOn(iso) { return all('meetings').filter((m) => m.fecha === iso).sort((a, b) => (a.hora || '').localeCompare(b.hora || '')); }
+function mtgHoras(m) { return (m.hora || '') + (m.horaFin ? ' – ' + m.horaFin : ''); }
+function detectPlatform(url) {
+  const u = String(url || '').toLowerCase();
+  if (u.includes('teams.microsoft') || u.includes('teams.live')) return 'Microsoft Teams';
+  if (u.includes('zoom.us')) return 'Zoom';
+  if (u.includes('meet.google')) return 'Google Meet';
+  if (u.includes('webex')) return 'Webex';
+  return '';
+}
+/* Lee una invitación pegada (Teams, Zoom, Meet, Webex) y extrae enlace, ID y código */
+function parseInvite(txt) {
+  const out = {};
+  const url = (txt.match(/https?:\/\/[^\s<>"')\]]+/gi) || []).find((x) => /teams|zoom|meet\.google|webex/i.test(x)) || (txt.match(/https?:\/\/[^\s<>"')\]]+/i) || [])[0];
+  if (url) { out.url = url.replace(/[.,;]+$/, ''); out.plataforma = detectPlatform(out.url) || 'Otra'; }
+  const id = txt.match(/(?:ID de (?:la )?reuni[oó]n|Meeting ID|Id\. de reuni[oó]n|N[uú]mero de reuni[oó]n)\s*[:：]?\s*([0-9][0-9 ]{5,}[0-9])/i);
+  if (id) out.idReunion = id[1].replace(/\s+/g, ' ').trim();
+  const code = txt.match(/(?:C[oó]digo de acceso|Contrase[nñ]a|Passcode|Password|C[oó]digo)\s*[:：]?\s*([^\s]{3,})/i);
+  if (code) out.codigo = code[1].trim();
+  return out;
+}
+function meetingCard(m) {
+  const v = m.modalidad === 'virtual';
+  return `<div class="card mtg"><button class="mtg-main" data-act="mtg-edit" data-id="${m.id}">
+      <span class="mtg-time">${esc(m.hora || '—')}${m.horaFin ? `<small>${esc(m.horaFin)}</small>` : ''}</span>
+      <span class="mtg-info"><b>${esc(m.titulo)}</b><span class="small ${v ? 't-igss' : 'muted'}">${v ? 'Virtual · ' + esc(m.plataforma || 'enlace') : 'Presencial' + (m.lugar ? ' · ' + esc(m.lugar) : '')}</span>
+      ${v && (m.idReunion || m.codigo) ? `<span class="small muted">${m.idReunion ? 'ID ' + esc(m.idReunion) : ''}${m.idReunion && m.codigo ? ' · ' : ''}${m.codigo ? 'Código ' + esc(m.codigo) : ''}</span>` : ''}</span></button>
+    ${v && m.url ? `<a class="btn sm navy" href="${esc(m.url)}" target="_blank" rel="noopener">Unirse</a>` : ''}</div>`;
+}
+function mtgModal(id) {
+  const m = id ? clone(get('meetings', id)) : { id: uid(), fecha: ui.view === 'dia' ? ui.date : todayISO(), hora: '', horaFin: '', titulo: '', modalidad: 'presencial', lugar: '', plataforma: 'Microsoft Teams', url: '', idReunion: '', codigo: '', notas: '' };
+  modalCtx = { kind: 'mtg', m, isNew: !id }; drawMtg();
+}
+function drawMtg() {
+  const { m, isNew } = modalCtx, v = m.modalidad === 'virtual';
+  const inp = (k, l, type = 'text', extra = '') => `<div class="field"><label for="m-${k}">${l}</label><input id="m-${k}" class="inp" type="${type}" value="${esc(m[k] ?? '')}" data-mchange="${k}" ${extra}></div>`;
+  modal(`<h2>${isNew ? 'Nueva reunión' : 'Editar reunión'}</h2>
+    ${inp('titulo', 'Asunto')}
+    <div class="grid2">${inp('fecha', 'Fecha', 'date')}<div class="grid2">${inp('hora', 'Inicio', 'time')}${inp('horaFin', 'Fin', 'time')}</div></div>
+    <div class="field"><span class="flabel">Modalidad</span><div class="seg"><button type="button" class="btn ${!v ? 'navy' : ''}" data-mact="mod" data-k="presencial">Presencial</button><button type="button" class="btn ${v ? 'navy' : ''}" data-mact="mod" data-k="virtual">Virtual</button></div></div>
+    ${v ? `<div class="field"><label for="m-inv">Pegar invitación (opcional)</label><textarea id="m-inv" class="inp" style="min-height:60px" placeholder="Pega aquí el texto de la invitación de Teams, Zoom o Meet y se llenan los datos solos"></textarea><div class="row"><button type="button" class="btn sm" data-mact="parse">Leer invitación</button></div></div>
+      <div class="field"><span class="flabel">Plataforma</span><div class="chips">${PLATAFORMAS.map((x) => `<button type="button" class="chip ${m.plataforma === x ? 'on' : ''}" data-mact="plat" data-k="${x}">${x}</button>`).join('')}</div></div>
+      ${inp('url', 'Enlace (URL) de la reunión', 'url', 'inputmode="url" placeholder="https://…"')}
+      <div class="grid2">${inp('idReunion', 'ID de la reunión', 'text', 'inputmode="numeric" autocomplete="off"')}${inp('codigo', 'Código de acceso', 'text', 'autocomplete="off"')}</div>`
+    : inp('lugar', 'Lugar', 'text', 'placeholder="Sala, oficina, planta…"')}
+    <div class="field"><label for="m-notas">Notas o participantes</label><textarea id="m-notas" class="inp" data-mchange="notas">${esc(m.notas || '')}</textarea></div>
+    ${!isNew ? `<div class="row">${v && m.url ? `<a class="btn sm navy" href="${esc(m.url)}" target="_blank" rel="noopener">Unirse</a>` : ''}<button type="button" class="btn sm" data-mact="copy">Copiar datos</button><button type="button" class="btn sm" data-mact="ics">Agregar a mi calendario</button></div>` : ''}
+    <div class="modal-foot">${!isNew ? '<button class="btn danger left" data-mact="del">Borrar</button>' : ''}<button class="btn" data-close>Cancelar</button><button class="btn dark" data-mact="save">Guardar</button></div>`, modalCtx);
+}
+function mtgText(m) {
+  const L = [m.titulo, DIAS[dow(m.fecha)] + ' ' + fmtLong(m.fecha) + (m.hora ? ', ' + mtgHoras(m) : '')];
+  if (m.modalidad === 'virtual') { L.push('Virtual' + (m.plataforma ? ' · ' + m.plataforma : '')); if (m.url) L.push(m.url); if (m.idReunion) L.push('ID de la reunión: ' + m.idReunion); if (m.codigo) L.push('Código de acceso: ' + m.codigo); }
+  else if (m.lugar) L.push('Lugar: ' + m.lugar);
+  if (m.notas) L.push(m.notas);
+  return L.join('\n');
+}
+function mtgICS(m) {
+  const dt = (iso, hm) => iso.replace(/-/g, '') + (hm ? 'T' + hm.replace(':', '') + '00' : '');
+  const icsEsc = (x) => String(x || '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/[,;]/g, (c) => '\\' + c);
+  const start = m.hora ? 'DTSTART;TZID=America/Guatemala:' + dt(m.fecha, m.hora) : 'DTSTART;VALUE=DATE:' + dt(m.fecha);
+  const end = m.hora ? 'DTEND;TZID=America/Guatemala:' + dt(m.fecha, m.horaFin || (() => { const [h, mi] = m.hora.split(':').map(Number); return pad(Math.min(23, h + 1)) + ':' + pad(mi); })()) : 'DTEND;VALUE=DATE:' + dt(addDays(m.fecha, 1));
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Rinze Studio//Agenda//ES', 'BEGIN:VEVENT', 'UID:' + m.id + '@agenda', 'DTSTAMP:' + new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z', start, end,
+    'SUMMARY:' + icsEsc(m.titulo), 'LOCATION:' + icsEsc(m.modalidad === 'virtual' ? (m.url || m.plataforma) : m.lugar), 'DESCRIPTION:' + icsEsc(mtgText(m)), m.url ? 'URL:' + m.url : '',
+    'BEGIN:VALARM', 'TRIGGER:-PT15M', 'ACTION:DISPLAY', 'DESCRIPTION:' + icsEsc(m.titulo), 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].filter(Boolean);
+  const blob = new Blob([lines.join('\r\n')], { type: 'text/calendar' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'reunion-' + m.fecha + '.ics'; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+async function mtgAction(act, el) {
+  const { m } = modalCtx;
+  if (act === 'mod') m.modalidad = el.dataset.k;
+  else if (act === 'plat') m.plataforma = el.dataset.k;
+  else if (act === 'parse') {
+    const r = parseInvite($('#m-inv').value || '');
+    if (!Object.keys(r).length) return toast('No encontré enlace, ID ni código en el texto');
+    Object.assign(m, r); toast('Datos leídos de la invitación');
+  } else if (act === 'copy') { try { await navigator.clipboard.writeText(mtgText(m)); toast('Datos copiados'); } catch (e) { toast('No se pudo copiar'); } return; }
+  else if (act === 'ics') return mtgICS(m);
+  else if (act === 'del') { const id = m.id; return confirmBox('¿Borrar esta reunión?', 'Borrar', true).then((ok) => { if (ok) del('meetings', id); render(); }); }
+  else if (act === 'save') {
+    if (!String(m.titulo).trim()) return toast('Escribe el asunto de la reunión');
+    if (!m.fecha) return toast('Elige la fecha');
+    if (m.hora && m.horaFin && m.horaFin < m.hora) return toast('La hora de fin es antes del inicio');
+    m.titulo = m.titulo.trim();
+    if (m.modalidad === 'virtual') { m.lugar = ''; if (m.url && !/^https?:\/\//i.test(m.url)) m.url = 'https://' + m.url.trim(); if (m.url && (!m.plataforma || m.plataforma === 'Otra')) m.plataforma = detectPlatform(m.url) || m.plataforma || 'Otra'; }
+    else { m.url = ''; m.idReunion = ''; m.codigo = ''; }
+    put('meetings', m); closeModal(); render(); toast('Reunión guardada'); return;
+  }
+  drawMtg();
+}
+
 /* Aviso por WhatsApp */
 function waTitle(a) {
   if (a.tipo === 'permiso') return 'Permiso autorizado';
@@ -1041,7 +1145,7 @@ async function applyTemplate() {
 
 /* ---------------- Eventos ---------------- */
 document.addEventListener('click', async (ev) => {
-  const el = ev.target.closest('[data-nav],[data-act],[data-close],[data-cf],[data-ract],[data-aact],[data-tact],[data-sact],[data-wact],[data-bg]');
+  const el = ev.target.closest('[data-nav],[data-act],[data-close],[data-cf],[data-ract],[data-aact],[data-tact],[data-sact],[data-wact],[data-mact],[data-bg]');
   if (!el) return;
   if (el.tagName === 'A' && el.getAttribute('href') === '#') ev.preventDefault();
   if (el.hasAttribute('data-bg')) { if (ev.target === el) { if (modalCtx && modalCtx.confirm) { modalCtx.confirm(false); } closeModal(); } return; }
@@ -1051,6 +1155,7 @@ document.addEventListener('click', async (ev) => {
   if (el.dataset.tact) return truckAction(el.dataset.tact, el);
   if (el.dataset.sact) return simpleAction(el.dataset.sact, el);
   if (el.dataset.wact) return waAction(el.dataset.wact);
+  if (el.dataset.mact) return mtgAction(el.dataset.mact, el);
   if (el.hasAttribute('data-close') && !el.dataset.nav) return closeModal();
   if (el.dataset.nav) { if (el.hasAttribute('data-close')) closeModal(); return go(el.dataset.nav); }
   const a = el.dataset.act, i = +el.dataset.i;
@@ -1078,6 +1183,8 @@ document.addEventListener('click', async (ev) => {
     case 'abs-new': absModal(null, el.dataset.tipo); break;
     case 'abs-edit': absModal(el.dataset.id); break;
     case 'wa': waModal(el.dataset.id, false); break;
+    case 'mtg-new': mtgModal(null); break;
+    case 'mtg-edit': mtgModal(el.dataset.id); break;
     case 'wa-kind': ui.waKind = el.dataset.k; ui.waDraft = null; render(); document.getElementById('wa-settings').scrollIntoView({ block: 'start' }); break;
     case 'wa-var': { const ta = $('#wa-tpl'); const ins = '{' + el.dataset.v + '}'; const a0 = ta.selectionStart ?? ta.value.length, b0 = ta.selectionEnd ?? ta.value.length; ta.value = ta.value.slice(0, a0) + ins + ta.value.slice(b0); ta.focus(); ta.setSelectionRange(a0 + ins.length, a0 + ins.length); ta.dispatchEvent(new Event('input', { bubbles: true })); break; }
     case 'wa-save': { const k = ui.waKind || 'permiso'; const v = $('#wa-tpl').value.trim(); if (!v) return toast('La plantilla está vacía'); put('templates', { id: 'wa-' + k, texto: v }); ui.waDraft = null; toast('Plantilla guardada'); render(); document.getElementById('wa-settings').scrollIntoView({ block: 'start' }); break; }
@@ -1115,6 +1222,7 @@ document.addEventListener('change', (ev) => {
   if (el.dataset.rchange) return rutaChange(el.dataset.rchange, el);
   if (el.dataset.achange) { modalCtx.a[el.dataset.achange] = el.value; if (el.dataset.achange === 'desde' && modalCtx.a.hasta < el.value) modalCtx.a.hasta = modalCtx.a.tipo === 'vacaciones' ? addDays(el.value, 14) : el.value; if (el.dataset.achange !== 'motivo') drawAbs(); return; }
   if (el.dataset.tchange) { modalCtx.t[el.dataset.tchange] = el.value; return; }
+  if (el.dataset.mchange) { modalCtx.m[el.dataset.mchange] = el.value; if (el.dataset.mchange === 'url' && el.value) { const pl = detectPlatform(el.value); if (pl && pl !== modalCtx.m.plataforma) { modalCtx.m.plataforma = pl; drawMtg(); } } return; }
   if (el.dataset.schange) { modalCtx.r[el.dataset.schange] = el.value; return; }
   const c = el.dataset.change; if (!c) return;
   const i = +el.dataset.i;
@@ -1210,7 +1318,9 @@ function printAgenda(year, month) {
   const m = month === '' ? null : +month;
   const from = m == null ? year + '-01-01' : year + '-' + pad(m + 1) + '-01';
   const to = m == null ? year + '-12-31' : toISO(new Date(+year, m + 1, 0, 12));
-  const days = all('days').filter((d) => d.id >= from && d.id <= to && dayHasContent(d)).sort((a, b) => a.id.localeCompare(b.id));
+  const mtgDates = all('meetings').filter((x) => x.fecha >= from && x.fecha <= to).map((x) => x.fecha);
+  const withData = all('days').filter((d) => d.id >= from && d.id <= to && dayHasContent(d));
+  const days = [...withData, ...[...new Set(mtgDates)].filter((f) => !withData.some((d) => d.id === f)).map(emptyDay)].sort((a, b) => a.id.localeCompare(b.id));
   const absIn = all('absences').filter((a) => a.desde <= to && (a.hasta || a.desde) >= from).sort((a, b) => a.desde.localeCompare(b.desde));
   let h = `<div class="p-cover"><h1>Agenda ${m == null ? year : MESES[m] + ' ' + year}</h1><p>${days.length} días registrados · ${absIn.length} ausencias</p><p style="margin-top:20mm;color:#666">Generado el ${fmtLong(todayISO())} · Agenda ${VERSION} · Rinze Studio</p></div>`;
   let curM = -1;
@@ -1221,6 +1331,7 @@ function printAgenda(year, month) {
     const z = Object.entries(d.z18.viajes || {}).filter(([, v]) => +v).sort(([a], [b]) => z18Rank(get('trucks', a) || {}) - z18Rank(get('trucks', b) || {})).map(([t, v]) => esc(tname(t)) + ' ' + v);
     h += `<div class="p-day"><h3><span>${DIAS[dow(d.id)]} ${fmtLong(d.id)}${hol ? ' · ' + esc(hol.nombre) : ''}</span><span>Semana ${wmWeek(d.id)}</span></h3><div class="p-grid"><div>
       <h4>Rutas</h4>${d.rutas.length ? '<ul>' + d.rutas.map((r) => `<li><b>${esc(r.clientes.map(cname).join(' + '))}</b>${r.parrillas ? ' (' + esc(r.parrillas) + ' parr.)' : ''} — ${r.camiones.map((c) => esc((c.truck ? tname(c.truck) + ': ' : '') + pname(c.chofer) + ((c.ayudantes || []).length ? ', ' + c.ayudantes.map(pname).join(', ') : ''))).join(' / ')}</li>`).join('') + '</ul>' : '<p>—</p>'}
+      ${meetingsOn(d.id).length ? '<h4>Reuniones</h4>' + meetingsOn(d.id).map((x) => `<p>${esc(mtgHoras(x))} <b>${esc(x.titulo)}</b> — ${x.modalidad === 'virtual' ? 'Virtual ' + esc(x.plataforma || '') + (x.idReunion ? ' · ID ' + esc(x.idReunion) : '') : 'Presencial' + (x.lugar ? ' · ' + esc(x.lugar) : '')}</p>`).join('') : ''}
       ${d.notas.length ? '<h4>Notas</h4>' + d.notas.map((n) => `<p>${esc(n.texto)}</p>`).join('') : ''}</div><div>
       <h4>Empaques</h4><p>${d.empaques.map((e) => esc(prodName(e.prod) + ' ' + e.cant)).join(' · ') || '—'}</p>
       <h4>Z18</h4><p>${z.join(' · ') || '—'}${(d.z18.apoyo || []).length ? '<br>Apoyo: ' + d.z18.apoyo.map((a) => esc(pname(a.chofer) + ' (' + tname(a.truck) + ') ' + (a.viajes || 0))).join(', ') : ''}</p>
