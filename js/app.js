@@ -2,8 +2,9 @@
 (function () {
 'use strict';
 
-const VERSION = 'V.5';
+const VERSION = 'V.6';
 const CHANGELOG = [
+  ['V.6', '2026-11-25', 'GRANDE (Z18) = 205BDM Poison. Camiones: buscador, filtros y casilla “En agenda”. Colaboradores: buscador y control de duplicados por tarjeta y nombre.'],
   ['V.5', '2026-11-25', 'Carga inicial desde Excel: 86 colaboradores con tarjeta y puesto, y 45 camiones con matrícula, capacidad y chofer. Puesto visible para todos los roles.'],
   ['V.4', '2026-11-25', 'Aviso por WhatsApp al autorizar permisos y vacaciones; número de tarjeta del colaborador; rol “Otro” con puesto (empacadores, verificadoras…) y filtro “Otros”.'],
   ['V.3', '2026-11-25', 'Sincronización compatible con el almacenamiento Blob conectado por OIDC.'],
@@ -141,6 +142,8 @@ const byName = (a, b) => String(a.nombre || a.codigo).localeCompare(String(b.nom
 const people = () => all('people').sort(byName);
 const activePeople = () => people().filter((p) => p.activo !== false);
 const trucks = () => all('trucks').sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es', { numeric: true }));
+const truckOn = (t) => t.activo !== false;
+const norm = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 const clients = () => all('clients').filter((c) => c.activo !== false).sort(byName);
 const products = () => all('products').sort((a, b) => (a.orden ?? 99) - (b.orden ?? 99) || byName(a, b));
 const pname = (id) => (get('people', id) || {}).nombre || '—';
@@ -210,6 +213,27 @@ function migrateV5() {
   persist();
 }
 
+/* Migración V.6: GRANDE (Z18) es el 205BDM Poison */
+function migrateV6() {
+  if (+(localStorage.getItem(LS_MIG) || 0) >= 6) return;
+  const now = Date.now(), NEW = 't-205bdm', OLD = 't-grande';
+  const g = S.col.trucks[NEW];
+  if (g && !g._d) { g.nombre = 'GRANDE'; g.nota = 'POISON'; g.uso = [...new Set([...(g.uso || []).filter((u) => u !== 'rutas'), 'z18', 'apoyo'])]; g._u = now; }
+  const fix = (d) => {
+    let ch = false;
+    (d.rutas || []).forEach((r) => (r.camiones || []).forEach((c) => { if (c.truck === OLD) { c.truck = NEW; ch = true; } }));
+    if (d.z18) {
+      if (d.z18.viajes && OLD in d.z18.viajes) { d.z18.viajes[NEW] = d.z18.viajes[OLD]; delete d.z18.viajes[OLD]; ch = true; }
+      (d.z18.apoyo || []).forEach((a) => { if (a.truck === OLD) { a.truck = NEW; ch = true; } });
+    }
+    if (ch) d._u = now;
+  };
+  Object.values(S.col.days).concat(Object.values(S.col.templates)).forEach((d) => { if (!d._d) fix(d); });
+  if (S.col.trucks[OLD] && !S.col.trucks[OLD]._d) S.col.trucks[OLD] = { id: OLD, _d: 1, _u: now };
+  localStorage.setItem(LS_MIG, '6');
+  persist();
+}
+
 /* ---------------- Días ---------------- */
 function emptyDay(iso) { return { id: iso, rutas: [], empaques: [], z18: { viajes: {}, apoyo: [] }, notas: [] }; }
 function getDay(iso) { const d = get('days', iso); return d ? clone(d) : emptyDay(iso); }
@@ -240,6 +264,9 @@ const ui = {
   paramTab: 'camiones',
   q: { tipo: 'colaborador', person: '', client: '', text: '', desde: addDays(todayISO(), -30), hasta: todayISO(), year: String(new Date().getFullYear()) },
   peopleFilter: 'todos',
+  truckFilter: 'todos',
+  truckQ: '',
+  peopleQ: '',
 };
 
 const NAV = [
@@ -263,9 +290,24 @@ function render() {
   const v = $('#view');
   const fn = { dia: viewDay, semana: viewWeek, ausencias: viewAbsences, consultas: viewQueries, parametros: viewParams, ajustes: viewSettings }[ui.view];
   v.innerHTML = fn();
+  applyFilters();
   if (ui.view === 'dia') document.title = 'Agenda · ' + DIAS[dow(ui.date)] + ' ' + fmtShort(ui.date);
   else document.title = 'Agenda';
 }
+
+function applyFilters() {
+  [['trucks', '#trucks-tbl tr[data-s]', ui.truckQ], ['people', '#people-grid [data-s]', ui.peopleQ]].forEach(([k, sel, q]) => {
+    const els = document.querySelectorAll(sel); if (!els.length && !document.querySelector(`[data-noresult="${k}"]`)) return;
+    const words = norm(q).split(' ').filter(Boolean); let shown = 0;
+    els.forEach((el) => { const ok = words.every((w) => el.dataset.s.includes(w)); el.style.display = ok ? '' : 'none'; if (ok) shown++; });
+    const nr = document.querySelector(`[data-noresult="${k}"]`); if (nr) nr.classList.toggle('hidden', shown > 0);
+  });
+}
+document.addEventListener('input', (ev) => {
+  const k = ev.target.dataset && ev.target.dataset.filter; if (!k) return;
+  if (k === 'trucks') ui.truckQ = ev.target.value; else ui.peopleQ = ev.target.value;
+  applyFilters();
+});
 
 function go(view, opts = {}) {
   if (view === 'mas') return openMoreMenu();
@@ -327,10 +369,10 @@ function viewDay() {
       <input class="inp" value="${esc(e.cant)}" placeholder="Cantidad" data-change="emp-cant" data-i="${i}" aria-label="Cantidad" inputmode="text">
       <button class="icon-btn" data-act="emp-del" data-i="${i}" aria-label="Quitar">${ic('x')}</button></div>`).join('');
 
-  const z18t = trucks().filter((t) => (t.uso || []).includes('z18'));
+  const z18t = trucks().filter((t) => truckOn(t) && (t.uso || []).includes('z18'));
   const z18 = z18t.map((t) => `<div class="z18box"><label for="z-${t.id}">${esc(t.nombre)}</label>
       <input id="z-${t.id}" class="inp num" type="number" min="0" inputmode="numeric" value="${day.z18.viajes[t.id] ?? ''}" placeholder="0" data-change="z18-v" data-t="${t.id}"></div>`).join('');
-  const apoyoTrucks = trucks();
+  const apoyoTrucks = trucks().filter((t) => truckOn(t) || (day.z18.apoyo || []).some((a) => a.truck === t.id));
   const choferes = activePeople().filter(isChofer);
   const apo = (day.z18.apoyo || []).map((a, i) => `<div class="apo-row">
       <select class="sel" data-change="apo-truck" data-i="${i}" aria-label="Camión de apoyo"><option value="">Camión…</option>${apoyoTrucks.map((t) => `<option value="${t.id}" ${t.id === a.truck ? 'selected' : ''}>${esc(t.nombre)}</option>`).join('')}</select>
@@ -504,18 +546,27 @@ function viewParams() {
   let body = '';
   const t = ui.paramTab;
   if (t === 'camiones') {
-    body = `<div class="sec-h"><h2>Camiones</h2><button class="btn sm dark" data-act="truck-new">+ Camión</button></div>
-    <div class="tbl-wrap"><table class="tbl"><tr><th>Número / nombre</th><th>Matrícula</th><th style="text-align:right">Capacidad máx. (parrillas)</th><th>Chofer asignado</th><th>Uso</th></tr>
-    ${trucks().map((x) => `<tr class="click" data-act="truck-edit" data-id="${x.id}"><td><b>${esc(x.nombre)}</b>${x.nota ? `<div class="small muted">${esc(x.nota)}</div>` : ''}</td><td class="mono">${esc(x.matricula || '—')}</td><td style="text-align:right"><b>${esc(x.capacidad || '—')}</b></td>
+    const tf = ui.truckFilter;
+    const all_ = trucks();
+    const list = all_.filter((x) => tf === 'todos' || (tf === 'on' ? truckOn(x) : tf === 'off' ? !truckOn(x) : tf === 'z18' ? (x.uso || []).includes('z18') : x.choferModo === 'varios'));
+    body = `<div class="sec-h"><h2>Camiones <span class="small muted">· ${all_.filter(truckOn).length} en agenda de ${all_.length}</span></h2><button class="btn sm dark" data-act="truck-new">+ Camión</button></div>
+    <div class="row"><input class="inp" style="max-width:340px" type="search" placeholder="Buscar matrícula, nombre o chofer…" value="${esc(ui.truckQ)}" data-filter="trucks" aria-label="Buscar camión">
+      ${[['todos', 'Todos'], ['on', 'En agenda'], ['off', 'Fuera de agenda'], ['z18', 'Z18'], ['varios', 'Chofer varios']].map(([k, l]) => `<button class="tab ${tf === k ? 'on' : ''}" data-act="tf" data-k="${k}">${l}</button>`).join('')}</div>
+    <div class="tbl-wrap"><table class="tbl" id="trucks-tbl"><tr><th style="width:70px">En agenda</th><th>Número / nombre</th><th>Matrícula</th><th style="text-align:right">Capacidad máx. (parrillas)</th><th>Chofer asignado</th><th>Uso</th></tr>
+    ${list.map((x) => { const chofer = x.choferModo === 'varios' ? 'varios ' + (x.choferes || []).map(pname).join(' ') : (x.chofer ? pname(x.chofer) : ''); return `<tr class="click ${truckOn(x) ? '' : 'off'}" data-act="truck-edit" data-id="${x.id}" data-s="${esc(norm([x.nombre, x.matricula, chofer, x.nota].join(' ')))}">
+      <td><label class="chk" title="Mostrar en la agenda"><input type="checkbox" data-act="truck-toggle" data-id="${x.id}" ${truckOn(x) ? 'checked' : ''} aria-label="${esc(x.nombre)} en agenda"></label></td>
+      <td><b>${esc(x.nombre)}</b>${x.nota ? `<div class="small muted">${esc(x.nota)}</div>` : ''}</td><td class="mono">${esc(x.matricula || '—')}</td><td style="text-align:right"><b>${esc(x.capacidad || '—')}</b></td>
       <td>${x.choferModo === 'varios' ? `<span class="tag navy">VARIOS</span> <span class="muted">${esc((x.choferes || []).map(pname).join(', '))}</span>` : esc(x.chofer ? pname(x.chofer) : '—')}</td>
-      <td class="muted">${esc((x.uso || []).map((u) => ({ rutas: 'Rutas', z18: 'Z18', apoyo: 'Apoyo' }[u])).join(' · '))}</td></tr>`).join('')}</table></div>`;
+      <td class="muted">${esc((x.uso || []).map((u) => ({ rutas: 'Rutas', z18: 'Z18', apoyo: 'Apoyo' }[u])).join(' · '))}</td></tr>`; }).join('')}</table>
+    <div class="empty hidden" data-noresult="trucks">Sin coincidencias.</div></div>`;
   } else if (t === 'personal') {
     const f = ui.peopleFilter;
     const list = people().filter((p) => f === 'todos' || (f === 'chofer' ? isChofer(p) : f === 'ayudante' ? isAyud(p) : p.rol === 'otro'));
     const absT = absentIds(todayISO());
     body = `<div class="sec-h"><h2>Colaboradores <span class="small muted">· ${activePeople().length} activos</span></h2>
       <div class="row">${[['todos', 'Todos'], ['chofer', 'Choferes'], ['ayudante', 'Ayudantes'], ['otro', 'Otros']].map(([k, l]) => `<button class="tab ${f === k ? 'on' : ''}" data-act="pf" data-k="${k}">${l}</button>`).join('')}<button class="btn sm dark" data-act="person-new">+ Colaborador</button></div></div>
-      <div class="pgrid">${list.map((p) => { const a = absencesOn(todayISO()).find((x) => x.personId === p.id && absT.has(p.id)); return `<button class="pcard ${p.activo === false ? 'inactive' : ''}" data-act="person-edit" data-id="${p.id}"><div class="row" style="justify-content:space-between;width:100%"><b>${esc(p.nombre)}</b>${a ? `<span class="pill t-${a.tipo}">${TIPOS[a.tipo].label}</span>` : ''}</div><span class="role ${p.rol}">${esc(roleLabel(p))}</span><span class="small muted">${p.tarjeta ? 'Tarjeta ' + esc(p.tarjeta) : 'Sin tarjeta'}${p.rol !== 'otro' && p.puesto && p.puesto !== ROLES[p.rol] ? ' · ' + esc(p.puesto) : ''}${p.area ? ' · ' + esc(p.area) : ''}</span></button>`; }).join('')}</div>`;
+      <input class="inp" style="max-width:340px" type="search" placeholder="Buscar nombre, tarjeta o puesto…" value="${esc(ui.peopleQ)}" data-filter="people" aria-label="Buscar colaborador">
+      <div class="pgrid" id="people-grid">${list.map((p) => { const a = absencesOn(todayISO()).find((x) => x.personId === p.id && absT.has(p.id)); return `<button class="pcard ${p.activo === false ? 'inactive' : ''}" data-act="person-edit" data-id="${p.id}" data-s="${esc(norm([p.nombre, p.tarjeta, p.puesto, roleLabel(p), p.area].join(' ')))}"><div class="row" style="justify-content:space-between;width:100%"><b>${esc(p.nombre)}</b>${a ? `<span class="pill t-${a.tipo}">${TIPOS[a.tipo].label}</span>` : ''}</div><span class="role ${p.rol}">${esc(roleLabel(p))}</span><span class="small muted">${p.tarjeta ? 'Tarjeta ' + esc(p.tarjeta) : 'Sin tarjeta'}${p.rol !== 'otro' && p.puesto && p.puesto !== ROLES[p.rol] ? ' · ' + esc(p.puesto) : ''}${p.area ? ' · ' + esc(p.area) : ''}</span></button>`; }).join('')}</div><div class="empty hidden" data-noresult="people">Sin coincidencias. Revisa la ortografía o búscalo por número de tarjeta.</div>`;
   } else if (t === 'clientes') {
     body = `<div class="sec-h"><h2>Clientes</h2><button class="btn sm dark" data-act="client-new">+ Cliente</button></div>
       <div class="tbl-wrap"><table class="tbl"><tr><th>Cliente</th><th>Registra parrillas</th><th>Estado</th></tr>${all('clients').sort(byName).map((c) => `<tr class="click" data-act="client-edit" data-id="${c.id}"><td><b>${esc(c.nombre)}</b></td><td>${c.usaParrillas ? 'Sí' : '—'}</td><td>${c.activo === false ? 'Inactivo' : 'Activo'}</td></tr>`).join('')}</table></div>`;
@@ -605,7 +656,7 @@ function drawRuta() {
   const need = trucksNeeded(r);
   const choferes = activePeople().filter(isChofer);
   const ayud = activePeople().filter(isAyud);
-  const tr = trucks().filter((t) => !(t.uso || []).length || (t.uso || []).includes('rutas') || (t.uso || []).includes('apoyo') || r.camiones.some((c) => c.truck === t.id));
+  const tr = trucks().filter((t) => (truckOn(t) && (!(t.uso || []).length || (t.uso || []).includes('rutas') || (t.uso || []).includes('apoyo'))) || r.camiones.some((c) => c.truck === t.id));
   const used = assignedElsewhere(idx);
   const camH = r.camiones.map((c, ci) => {
     const t = get('trucks', c.truck);
@@ -777,6 +828,7 @@ function drawTruck() {
     <div class="field"><label for="t-m">Matrícula</label><input id="t-m" class="inp" value="${esc(t.matricula)}" data-tchange="matricula" style="text-transform:uppercase"></div></div>
     <div class="field"><label for="t-o">Nota</label><input id="t-o" class="inp" value="${esc(t.nota || '')}" data-tchange="nota"></div>
     <div class="field"><label for="t-c">Capacidad máxima (parrillas)</label><input id="t-c" class="inp" inputmode="numeric" style="max-width:160px" value="${esc(t.capacidad)}" data-tchange="capacidad"></div>
+    <div class="field"><span class="flabel">En agenda</span><div class="seg"><button type="button" class="btn ${t.activo !== false ? 'navy' : ''}" data-tact="act" data-k="1">Visible al asignar</button><button type="button" class="btn ${t.activo === false ? 'navy' : ''}" data-tact="act" data-k="">Oculto</button></div></div>
     <div class="field"><span class="flabel">Uso</span><div class="chips">${[['rutas', 'Rutas'], ['z18', 'Z18 (viajes fijos)'], ['apoyo', 'Apoyo']].map(([k, l]) => `<button type="button" class="chip ${(t.uso || []).includes(k) ? 'on' : ''}" data-tact="uso" data-k="${k}">${l}</button>`).join('')}</div></div>
     <div class="field"><span class="flabel">Chofer asignado</span><div class="seg"><button type="button" class="btn ${t.choferModo !== 'varios' ? 'navy' : ''}" data-tact="modo" data-k="fijo">Chofer fijo</button><button type="button" class="btn ${t.choferModo === 'varios' ? 'navy' : ''}" data-tact="modo" data-k="varios">Varios</button></div></div>
     ${t.choferModo === 'varios' ? `<div class="chips">${ch.map((p) => `<button type="button" class="chip ${(t.choferes || []).includes(p.id) ? 'on' : ''}" data-tact="ch" data-id="${p.id}">${esc(p.nombre)}</button>`).join('')}</div><div class="hint">Al usar este camión eliges el chofer del día; los marcados aparecen primero.</div>`
@@ -787,6 +839,7 @@ function truckAction(act, el) {
   const { t } = modalCtx;
   if (act === 'uso') { const k = el.dataset.k; t.uso = (t.uso || []).includes(k) ? t.uso.filter((x) => x !== k) : [...(t.uso || []), k]; }
   else if (act === 'modo') t.choferModo = el.dataset.k;
+  else if (act === 'act') t.activo = !!el.dataset.k;
   else if (act === 'ch') { const id = el.dataset.id; t.choferes = (t.choferes || []).includes(id) ? t.choferes.filter((x) => x !== id) : [...(t.choferes || []), id]; }
   else if (act === 'del') { const id = t.id; return confirmBox('¿Borrar este camión? Los días ya registrados lo mostrarán como “—”.', 'Borrar', true).then((ok) => { if (ok) del('trucks', id); render(); }); }
   else if (act === 'save') { if (!t.nombre.trim()) return toast('Escribe el número o nombre'); t.nombre = t.nombre.trim(); t.matricula = (t.matricula || '').toUpperCase().trim(); put('trucks', t); closeModal(); render(); return; }
@@ -828,7 +881,19 @@ function simpleAction(act, el) {
     else if (!String(r.nombre).trim()) return toast('Escribe el nombre');
     if (sk === 'hol' && !r.fecha) return toast('Elige la fecha');
     if (r.nombre) r.nombre = r.nombre.trim();
-    if (sk === 'person') { r.tarjeta = String(r.tarjeta || '').trim(); r.puesto = String(r.puesto || '').trim(); }
+    if (sk === 'person') {
+      r.tarjeta = String(r.tarjeta || '').trim(); r.puesto = String(r.puesto || '').trim();
+      const others = people().filter((x) => x.id !== r.id);
+      const sameT = r.tarjeta && others.find((x) => String(x.tarjeta || '') === r.tarjeta);
+      if (sameT) return toast('La tarjeta ' + r.tarjeta + ' ya es de ' + sameT.nombre);
+      const sameN = others.filter((x) => norm(x.nombre) === norm(r.nombre));
+      if (sameN.length) {
+        const rec = clone(r);
+        confirmBox(`Ya existe <b>${esc(sameN.map((x) => x.nombre + (x.tarjeta ? ' (tarjeta ' + x.tarjeta + ')' : '')).join(', '))}</b>. ¿Es otra persona con el mismo nombre?`, 'Sí, guardar', true)
+          .then((ok) => { if (ok) { put(def.col, rec); render(); } else { modalCtx = { kind: 'simple', sk, def, r: rec, isNew: !get(def.col, rec.id) }; drawSimple(); } });
+        return;
+      }
+    }
     put(def.col, r); closeModal(); render(); return;
   }
   drawSimple();
@@ -903,8 +968,10 @@ document.addEventListener('click', async (ev) => {
     case 'q-tab': ui.q.tipo = el.dataset.k; render(); break;
     case 'ptab': ui.paramTab = el.dataset.k; render(); break;
     case 'pf': ui.peopleFilter = el.dataset.k; render(); break;
+    case 'tf': ui.truckFilter = el.dataset.k; render(); break;
+    case 'truck-toggle': { ev.stopPropagation(); const t = get('trucks', el.dataset.id); if (t) { const c = clone(t); c.activo = el.checked; put('trucks', c); toast(c.nombre + (c.activo ? ' visible en la agenda' : ' oculto en la agenda')); render(); } break; }
     case 'truck-new': truckModal(null); break;
-    case 'truck-edit': truckModal(el.dataset.id); break;
+    case 'truck-edit': if (ev.target.closest('.chk')) break; truckModal(el.dataset.id); break;
     case 'person-new': simpleModal('person'); break;
     case 'person-edit': simpleModal('person', el.dataset.id); break;
     case 'client-new': simpleModal('client'); break;
@@ -1047,6 +1114,7 @@ function printAgenda(year, month) {
 function start() {
   seed();
   migrateV5();
+  migrateV6();
   render();
   if (localStorage.getItem(LS_KEY)) syncNow();
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('/sw.js').catch(() => {});

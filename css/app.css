@@ -151,6 +151,9 @@ table.tbl{width:100%;border-collapse:collapse;font-size:14px}
 .tbl td{padding:9px 10px;border-top:1px solid var(--cardline);vertical-align:top}
 .tbl tr.click{cursor:pointer}
 .tbl tr.click:hover td{background:#F3EAD6}
+.tbl tr.off td{color:#9A8D72}
+.chk{display:inline-flex;align-items:center;justify-content:center;width:44px;height:34px;cursor:pointer}
+.chk input{width:20px;height:20px;accent-color:#1B2A4A;cursor:pointer}
 .mono{font-family:ui-monospace,Menlo,monospace;font-size:13px}
 .tabs{display:flex;gap:6px;flex-wrap:wrap}
 .tab{height:36px;padding:0 14px;border-radius:10px;border:1px solid var(--btnline);background:var(--btn);font-size:13px;font-weight:600;cursor:pointer}

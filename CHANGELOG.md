@@ -2,6 +2,11 @@
 
 La versión visible en la app está en `js/app.js` (`VERSION` y `CHANGELOG`). Cada actualización sube la versión.
 
+## V.6 — 2026-11-25
+- GRANDE (Z18) es el 205BDM Poison de Giovanni; se reasignan los viajes ya registrados.
+- Camiones: buscador (matrícula, nombre, chofer), filtros (En agenda, Fuera de agenda, Z18, Chofer varios) y casilla “En agenda”; solo los marcados aparecen al asignar rutas y apoyo.
+- Colaboradores: buscador (nombre, tarjeta, puesto) y control de duplicados: no permite repetir tarjeta y avisa si el nombre ya existe.
+
 ## V.5 — 2026-11-25
 - Carga inicial desde Excel (`js/carga-inicial.js`): 86 colaboradores con tarjeta y puesto principal; 45 camiones con matrícula, capacidad en parrillas y chofer (o “Varios”).
 - Los colaboradores y camiones de ejemplo se reemplazan por los del Excel y se actualizan sus referencias en días y ausencias.
