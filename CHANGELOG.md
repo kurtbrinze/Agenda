@@ -2,6 +2,9 @@
 
 La versión visible en la app está en `js/app.js` (`VERSION` y `CHANGELOG`). Cada actualización sube la versión.
 
+## V.9 — 2026-11-25
+- Traslados Z18 siempre en el orden GMC, AXEL, GRANDE (en el día, la semana y el PDF).
+
 ## V.8 — 2026-11-25
 - Al programar una ruta, el camión se elige de una lista en columnas: camión y matrícula, chofer asignado y parrillas, con buscador. Marca los camiones ya usados en otra ruta del día.
 - Al elegir un camión con chofer fijo, se asigna ese chofer.

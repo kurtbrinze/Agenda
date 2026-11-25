@@ -2,8 +2,9 @@
 (function () {
 'use strict';
 
-const VERSION = 'V.8';
+const VERSION = 'V.9';
 const CHANGELOG = [
+  ['V.9', '2026-11-25', 'Traslados Z18 en orden fijo: GMC, AXEL, GRANDE (otros camiones de Z18 después).'],
   ['V.8', '2026-11-25', 'Selector de camión en columnas (camión y matrícula, chofer asignado, parrillas) con buscador al programar rutas.'],
   ['V.7', '2026-11-25', 'Plantillas de mensajes de WhatsApp por tipo de ausencia, con variables y vista previa (Ajustes).'],
   ['V.6', '2026-11-25', 'GRANDE (Z18) = 205BDM Poison. Camiones: buscador, filtros y casilla “En agenda”. Colaboradores: buscador y control de duplicados por tarjeta y nombre.'],
@@ -145,6 +146,8 @@ const people = () => all('people').sort(byName);
 const activePeople = () => people().filter((p) => p.activo !== false);
 const trucks = () => all('trucks').sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es', { numeric: true }));
 const truckOn = (t) => t.activo !== false;
+const Z18_ORDEN = ['GMC', 'AXEL', 'GRANDE'];
+const z18Rank = (t) => { const i = Z18_ORDEN.indexOf(String(t.nombre || '').toUpperCase()); return i < 0 ? 99 : i; };
 const norm = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 const clients = () => all('clients').filter((c) => c.activo !== false).sort(byName);
 const products = () => all('products').sort((a, b) => (a.orden ?? 99) - (b.orden ?? 99) || byName(a, b));
@@ -377,7 +380,7 @@ function viewDay() {
       <input class="inp" value="${esc(e.cant)}" placeholder="Cantidad" data-change="emp-cant" data-i="${i}" aria-label="Cantidad" inputmode="text">
       <button class="icon-btn" data-act="emp-del" data-i="${i}" aria-label="Quitar">${ic('x')}</button></div>`).join('');
 
-  const z18t = trucks().filter((t) => truckOn(t) && (t.uso || []).includes('z18'));
+  const z18t = trucks().filter((t) => truckOn(t) && (t.uso || []).includes('z18')).sort((a, b) => z18Rank(a) - z18Rank(b));
   const z18 = z18t.map((t) => `<div class="z18box"><label for="z-${t.id}">${esc(t.nombre)}</label>
       <input id="z-${t.id}" class="inp num" type="number" min="0" inputmode="numeric" value="${day.z18.viajes[t.id] ?? ''}" placeholder="0" data-change="z18-v" data-t="${t.id}"></div>`).join('');
   const apoyoTrucks = trucks().filter((t) => truckOn(t) || (day.z18.apoyo || []).some((a) => a.truck === t.id));
@@ -443,7 +446,7 @@ function viewWeek() {
     const d = get('days', iso), hol = holidayOf(iso), abs = absencesOn(iso), off = isOff(iso);
     const rutas = d ? d.rutas.map((r) => `<div>• ${esc(r.clientes.map(cname).join(' + '))}</div>`).join('') : '';
     const emp = d && d.empaques.length ? d.empaques.map((e) => `${esc(prodName(e.prod))} ${esc(e.cant)}`).join(', ') : '';
-    const z = d ? Object.entries(d.z18.viajes || {}).filter(([, v]) => +v).map(([t, v]) => `${esc(tname(t))} ${v}`).join(' · ') : '';
+    const z = d ? Object.entries(d.z18.viajes || {}).filter(([, v]) => +v).sort(([a], [b]) => z18Rank(get('trucks', a) || {}) - z18Rank(get('trucks', b) || {})).map(([t, v]) => `${esc(tname(t))} ${v}`).join(' · ') : '';
     return `<button class="wday ${iso === todayISO() ? 'today' : ''} ${off ? 'off' : ''}" data-act="goto-day" data-d="${iso}">
       <h3>${DIAS_C[dow(iso)]} ${parse(iso).getDate()}</h3>
       ${hol ? `<span class="tag">${esc(hol.nombre)}</span>` : ''}
@@ -1191,7 +1194,7 @@ function printAgenda(year, month) {
     const mm = parse(d.id).getMonth();
     if (mm !== curM) { h += `<div class="p-month ${curM !== -1 ? 'p-break' : ''}">${MESES[mm][0].toUpperCase() + MESES[mm].slice(1)} ${year}</div>`; curM = mm; }
     const hol = holidayOf(d.id), abs = absencesOn(d.id);
-    const z = Object.entries(d.z18.viajes || {}).filter(([, v]) => +v).map(([t, v]) => esc(tname(t)) + ' ' + v);
+    const z = Object.entries(d.z18.viajes || {}).filter(([, v]) => +v).sort(([a], [b]) => z18Rank(get('trucks', a) || {}) - z18Rank(get('trucks', b) || {})).map(([t, v]) => esc(tname(t)) + ' ' + v);
     h += `<div class="p-day"><h3><span>${DIAS[dow(d.id)]} ${fmtLong(d.id)}${hol ? ' · ' + esc(hol.nombre) : ''}</span><span>Semana ${wmWeek(d.id)}</span></h3><div class="p-grid"><div>
       <h4>Rutas</h4>${d.rutas.length ? '<ul>' + d.rutas.map((r) => `<li><b>${esc(r.clientes.map(cname).join(' + '))}</b>${r.parrillas ? ' (' + esc(r.parrillas) + ' parr.)' : ''} — ${r.camiones.map((c) => esc((c.truck ? tname(c.truck) + ': ' : '') + pname(c.chofer) + ((c.ayudantes || []).length ? ', ' + c.ayudantes.map(pname).join(', ') : ''))).join(' / ')}</li>`).join('') + '</ul>' : '<p>—</p>'}
       ${d.notas.length ? '<h4>Notas</h4>' + d.notas.map((n) => `<p>${esc(n.texto)}</p>`).join('') : ''}</div><div>
