@@ -2,8 +2,9 @@
 (function () {
 'use strict';
 
-const VERSION = 'V.3';
+const VERSION = 'V.4';
 const CHANGELOG = [
+  ['V.4', '2026-11-25', 'Aviso por WhatsApp al autorizar permisos y vacaciones; número de tarjeta del colaborador; rol “Otro” con puesto (empacadores, verificadoras…) y filtro “Otros”.'],
   ['V.3', '2026-11-25', 'Sincronización compatible con el almacenamiento Blob conectado por OIDC.'],
   ['V.2', '2026-11-25', 'Logo oficial de Rinze Studio y registro de versiones en Ajustes.'],
   ['V.1', '2026-11-25', 'Primera versión: día tipo libreta, rutas, empaques, Z18, ausencias, semana, calendario, consultas, parámetros, PDF, respaldo y sincronización.'],
@@ -29,7 +30,12 @@ const TIPOS = {
   vacaciones: { label: 'Vacaciones', cls: 'vacaciones' },
   igss: { label: 'Suspensión IGSS', cls: 'igss' },
 };
-const ROLES = { chofer: 'Chofer', ayudante: 'Ayudante', ambos: 'Chofer y ayudante' };
+const ROLES = { chofer: 'Chofer', ayudante: 'Ayudante', ambos: 'Chofer y ayudante', otro: 'Otro' };
+const PUESTOS = ['Empacador', 'Empacadora', 'Verificador', 'Verificadora', 'Bodeguero', 'Auxiliar', 'Supervisor'];
+const isChofer = (p) => p.rol === 'chofer' || p.rol === 'ambos';
+const isAyud = (p) => p.rol === 'ayudante' || p.rol === 'ambos';
+const roleLabel = (p) => (p.rol === 'otro' ? (p.puesto || 'Otro') : ROLES[p.rol] || '');
+const tarjeta = (p) => (p && p.tarjeta ? ' · #' + p.tarjeta : '');
 
 function pad(n) { return String(n).padStart(2, '0'); }
 function toISO(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
@@ -77,6 +83,7 @@ const I = {
   warn: '<path d="M12 3l10 18H2z"/><path d="M12 10v5"/><path d="M12 18v.5"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   pdf: '<path d="M6 3h9l4 4v14H6z"/><path d="M9 13h7M9 17h5"/>',
+  wa: '<path d="M4 20l1.3-3.9A8 8 0 1 1 8 18.9z"/><path d="M9 9.5c0 3 2.5 5.5 5.5 5.5l1-1.5-2-1-1 .8a4 4 0 0 1-1.8-1.8l.8-1-1-2z"/>',
   sync: '<path d="M20 11a8 8 0 0 0-14-5l-2 2M4 13a8 8 0 0 0 14 5l2-2"/><path d="M4 4v4h4M20 20v-4h-4"/>',
 };
 const ic = (n) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[n]}</svg>`;
@@ -287,7 +294,7 @@ function viewDay() {
   const z18 = z18t.map((t) => `<div class="z18box"><label for="z-${t.id}">${esc(t.nombre)}</label>
       <input id="z-${t.id}" class="inp num" type="number" min="0" inputmode="numeric" value="${day.z18.viajes[t.id] ?? ''}" placeholder="0" data-change="z18-v" data-t="${t.id}"></div>`).join('');
   const apoyoTrucks = trucks();
-  const choferes = activePeople().filter((p) => p.rol !== 'ayudante');
+  const choferes = activePeople().filter(isChofer);
   const apo = (day.z18.apoyo || []).map((a, i) => `<div class="apo-row">
       <select class="sel" data-change="apo-truck" data-i="${i}" aria-label="Camión de apoyo"><option value="">Camión…</option>${apoyoTrucks.map((t) => `<option value="${t.id}" ${t.id === a.truck ? 'selected' : ''}>${esc(t.nombre)}</option>`).join('')}</select>
       <select class="sel" data-change="apo-chofer" data-i="${i}" aria-label="Chofer de apoyo"><option value="">Chofer…</option>${choferes.map((p) => `<option value="${p.id}" ${p.id === a.chofer ? 'selected' : ''}>${esc(p.nombre)}${absIds.has(p.id) ? ' (ausente)' : ''}</option>`).join('')}</select>
@@ -297,7 +304,7 @@ function viewDay() {
   const notas = day.notas.map((n, i) => `<div class="card nota">${esc(n.texto)}<button class="icon-btn" data-act="nota-del" data-i="${i}" aria-label="Borrar nota">${ic('x')}</button></div>`).join('');
 
   const abs = absencesOn(iso).sort((a, b) => Object.keys(TIPOS).indexOf(a.tipo) - Object.keys(TIPOS).indexOf(b.tipo));
-  const absH = abs.map((a) => `<button class="abs t-${a.tipo}" data-act="abs-edit" data-id="${a.id}"><span class="dot bg-${a.tipo}"></span><span><b>${esc(pname(a.personId))}</b> · ${TIPOS[a.tipo].label}${a.motivo ? ' · ' + esc(a.motivo) : (a.tipo === 'falta' ? ' · sin reportarse' : '')} · ${fmtRange(a.desde, a.hasta)}${a.tipo === 'vacaciones' ? (a.estado === 'solicitada' ? ' <span class="muted">(solicitadas, aprox.)</span>' : ' <span class="t-permiso">(confirmadas RRHH)</span>') : ''}</span></button>`).join('');
+  const absH = abs.map((a) => `<button class="abs t-${a.tipo}" data-act="abs-edit" data-id="${a.id}"><span class="dot bg-${a.tipo}"></span><span><b>${esc(pname(a.personId))}</b> · ${TIPOS[a.tipo].label}${a.motivo ? ' · ' + esc(a.motivo) : (a.tipo === 'falta' ? ' · sin reportarse' : '')} · ${fmtRange(a.desde, a.hasta)}${a.tipo === 'vacaciones' ? (a.estado === 'solicitada' ? ' <span class="muted">(solicitadas, aprox.)</span>' : ' <span class="t-permiso">(confirmadas RRHH)</span>') : ''}${a.comunicado ? ' <span class="muted small">· enviado</span>' : ''}</span></button>`).join('');
 
   h += `<div class="paper">
     <div class="col">
@@ -456,7 +463,7 @@ function yearsAvailable() {
 
 /* ---------------- Vista: Parámetros ---------------- */
 function viewParams() {
-  const tabs = [['camiones', 'Camiones'], ['personal', 'Choferes y ayudantes'], ['clientes', 'Clientes'], ['productos', 'Productos de empaque'], ['feriados', 'Feriados']];
+  const tabs = [['camiones', 'Camiones'], ['personal', 'Colaboradores'], ['clientes', 'Clientes'], ['productos', 'Productos de empaque'], ['feriados', 'Feriados']];
   let body = '';
   const t = ui.paramTab;
   if (t === 'camiones') {
@@ -467,11 +474,11 @@ function viewParams() {
       <td class="muted">${esc((x.uso || []).map((u) => ({ rutas: 'Rutas', z18: 'Z18', apoyo: 'Apoyo' }[u])).join(' · '))}</td></tr>`).join('')}</table></div>`;
   } else if (t === 'personal') {
     const f = ui.peopleFilter;
-    const list = people().filter((p) => f === 'todos' || (f === 'chofer' ? p.rol !== 'ayudante' : p.rol !== 'chofer'));
+    const list = people().filter((p) => f === 'todos' || (f === 'chofer' ? isChofer(p) : f === 'ayudante' ? isAyud(p) : p.rol === 'otro'));
     const absT = absentIds(todayISO());
-    body = `<div class="sec-h"><h2>Choferes y ayudantes <span class="small muted">· ${activePeople().length} activos</span></h2>
-      <div class="row">${[['todos', 'Todos'], ['chofer', 'Choferes'], ['ayudante', 'Ayudantes']].map(([k, l]) => `<button class="tab ${f === k ? 'on' : ''}" data-act="pf" data-k="${k}">${l}</button>`).join('')}<button class="btn sm dark" data-act="person-new">+ Colaborador</button></div></div>
-      <div class="pgrid">${list.map((p) => { const a = absencesOn(todayISO()).find((x) => x.personId === p.id && absT.has(p.id)); return `<button class="pcard ${p.activo === false ? 'inactive' : ''}" data-act="person-edit" data-id="${p.id}"><div class="row" style="justify-content:space-between;width:100%"><b>${esc(p.nombre)}</b>${a ? `<span class="pill t-${a.tipo}">${TIPOS[a.tipo].label}</span>` : ''}</div><span class="role ${p.rol}">${ROLES[p.rol]}</span>${p.area ? `<span class="small muted">${esc(p.area)}</span>` : ''}</button>`; }).join('')}</div>`;
+    body = `<div class="sec-h"><h2>Colaboradores <span class="small muted">· ${activePeople().length} activos</span></h2>
+      <div class="row">${[['todos', 'Todos'], ['chofer', 'Choferes'], ['ayudante', 'Ayudantes'], ['otro', 'Otros']].map(([k, l]) => `<button class="tab ${f === k ? 'on' : ''}" data-act="pf" data-k="${k}">${l}</button>`).join('')}<button class="btn sm dark" data-act="person-new">+ Colaborador</button></div></div>
+      <div class="pgrid">${list.map((p) => { const a = absencesOn(todayISO()).find((x) => x.personId === p.id && absT.has(p.id)); return `<button class="pcard ${p.activo === false ? 'inactive' : ''}" data-act="person-edit" data-id="${p.id}"><div class="row" style="justify-content:space-between;width:100%"><b>${esc(p.nombre)}</b>${a ? `<span class="pill t-${a.tipo}">${TIPOS[a.tipo].label}</span>` : ''}</div><span class="role ${p.rol}">${esc(roleLabel(p))}</span><span class="small muted">${p.tarjeta ? 'Tarjeta ' + esc(p.tarjeta) : 'Sin tarjeta'}${p.area ? ' · ' + esc(p.area) : ''}</span></button>`; }).join('')}</div>`;
   } else if (t === 'clientes') {
     body = `<div class="sec-h"><h2>Clientes</h2><button class="btn sm dark" data-act="client-new">+ Cliente</button></div>
       <div class="tbl-wrap"><table class="tbl"><tr><th>Cliente</th><th>Registra parrillas</th><th>Estado</th></tr>${all('clients').sort(byName).map((c) => `<tr class="click" data-act="client-edit" data-id="${c.id}"><td><b>${esc(c.nombre)}</b></td><td>${c.usaParrillas ? 'Sí' : '—'}</td><td>${c.activo === false ? 'Inactivo' : 'Activo'}</td></tr>`).join('')}</table></div>`;
@@ -559,8 +566,8 @@ function drawRuta() {
   const cl = clients();
   const needParr = r.clientes.some((c) => (get('clients', c) || {}).usaParrillas) || r.parrillas;
   const need = trucksNeeded(r);
-  const choferes = activePeople().filter((p) => p.rol !== 'ayudante');
-  const ayud = activePeople().filter((p) => p.rol !== 'chofer');
+  const choferes = activePeople().filter(isChofer);
+  const ayud = activePeople().filter(isAyud);
   const tr = trucks().filter((t) => !(t.uso || []).length || (t.uso || []).includes('rutas') || (t.uso || []).includes('apoyo') || r.camiones.some((c) => c.truck === t.id));
   const used = assignedElsewhere(idx);
   const camH = r.camiones.map((c, ci) => {
@@ -631,12 +638,13 @@ function drawAbs() {
   const dias = diffDays(a.desde, a.hasta) + 1;
   modal(`<h2>${isNew ? 'Registrar ausencia' : 'Editar ausencia'}</h2>
     <div class="field"><span class="flabel">Tipo</span><div class="chips">${Object.entries(TIPOS).map(([k, t]) => `<button type="button" class="chip ${a.tipo === k ? 'on' : ''}" data-aact="tipo" data-k="${k}"><span class="dot bg-${k}"></span>${t.label}</button>`).join('')}</div></div>
-    <div class="field"><label for="a-p">Colaborador</label><select id="a-p" class="sel" data-achange="personId"><option value="">Elige…</option>${people().map((p) => `<option value="${p.id}" ${p.id === a.personId ? 'selected' : ''}>${esc(p.nombre)} · ${ROLES[p.rol]}</option>`).join('')}</select></div>
+    <div class="field"><label for="a-p">Colaborador</label><select id="a-p" class="sel" data-achange="personId"><option value="">Elige…</option>${people().map((p) => `<option value="${p.id}" ${p.id === a.personId ? 'selected' : ''}>${esc(p.nombre)}${esc(tarjeta(p))} · ${esc(roleLabel(p))}</option>`).join('')}</select></div>
     <div class="grid2"><div class="field"><label for="a-d">Desde</label><input id="a-d" class="inp" type="date" value="${a.desde}" data-achange="desde"></div>
     <div class="field"><label for="a-h">Hasta</label><input id="a-h" class="inp" type="date" value="${a.hasta}" data-achange="hasta"></div></div>
     <div class="hint">${dias} día(s) calendario${a.tipo === 'vacaciones' ? ' · normalmente 15' : ''}</div>
     ${a.tipo === 'vacaciones' ? `<div class="field"><span class="flabel">Estado</span><div class="seg"><button type="button" class="btn ${a.estado === 'solicitada' ? 'navy' : ''}" data-aact="estado" data-k="solicitada">Solicitadas (aprox.)</button><button type="button" class="btn ${a.estado === 'confirmada' ? 'navy' : ''}" data-aact="estado" data-k="confirmada">Confirmadas por RRHH</button></div></div>` : ''}
     <div class="field"><label for="a-m">${a.tipo === 'falta' ? 'Motivo (vacío si no se reportó)' : a.tipo === 'igss' ? 'Detalle (opcional)' : 'Motivo'}</label><input id="a-m" class="inp" value="${esc(a.motivo)}" data-achange="motivo"></div>
+    ${!isNew ? `<div class="row"><button type="button" class="btn sm wa" data-act="wa" data-id="${a.id}">${ic('wa')}Enviar por WhatsApp</button>${a.comunicado ? '<span class="small t-permiso">Enviado ' + new Date(a.comunicado).toLocaleDateString('es-GT') + '</span>' : ''}</div>` : ''}
     <div class="modal-foot">${!isNew ? '<button class="btn danger left" data-aact="del">Borrar</button>' : ''}<button class="btn" data-close>Cancelar</button><button class="btn dark" data-aact="save">Guardar</button></div>`, modalCtx);
 }
 function absAction(act, el) {
@@ -648,18 +656,75 @@ function absAction(act, el) {
     if (!a.personId) return toast('Elige el colaborador');
     if (a.hasta < a.desde) return toast('La fecha final es antes de la inicial');
     if (a.tipo !== 'vacaciones') delete a.estado;
-    const doSave = () => { put('absences', a); closeModal(); render(); toast('Ausencia guardada'); };
+    const before = get('absences', a.id);
+    const after = (rec) => { if (shouldNotify(rec, before)) waModal(rec.id, true); };
+    const doSave = () => { put('absences', a); closeModal(); render(); toast('Ausencia guardada'); after(a); };
     if (a.tipo === 'vacaciones') {
       const over = all('absences').filter((x) => x.tipo === 'vacaciones' && x.id !== a.id && x.personId !== a.personId && x.desde <= a.hasta && (x.hasta || x.desde) >= a.desde);
       if (over.length) {
         const saved = clone(a);
         const msg = `<div class="alert" style="margin:0">${ic('warn')}<span>Estas vacaciones se traslapan con:<br>${over.map((x) => `<b>${esc(pname(x.personId))}</b> · ${fmtRange(x.desde, x.hasta)} ${x.estado === 'solicitada' ? '(aprox.)' : '(confirmadas)'} · ${diffDays(saved.desde > x.desde ? saved.desde : x.desde, saved.hasta < (x.hasta || x.desde) ? saved.hasta : (x.hasta || x.desde)) + 1} día(s) en común`).join('<br>')}</span></div><p>Si son de áreas que no se afectan, puedes guardarlas igual.</p>`;
-        confirmBox(msg, 'Guardar de todos modos', true).then((ok) => { if (ok) { put('absences', saved); toast('Ausencia guardada'); render(); } else { modalCtx = { kind: 'abs', a: saved, isNew: !get('absences', saved.id) }; drawAbs(); } });
+        confirmBox(msg, 'Guardar de todos modos', true).then((ok) => { if (ok) { put('absences', saved); toast('Ausencia guardada'); render(); after(saved); } else { modalCtx = { kind: 'abs', a: saved, isNew: !get('absences', saved.id) }; drawAbs(); } });
         return;
       }
     }
     doSave();
   }
+}
+
+/* Aviso por WhatsApp */
+function waTitle(a) {
+  if (a.tipo === 'permiso') return 'Permiso autorizado';
+  if (a.tipo === 'vacaciones') return a.estado === 'solicitada' ? 'Solicitud de vacaciones' : 'Vacaciones autorizadas';
+  if (a.tipo === 'igss') return 'Suspensión IGSS';
+  return 'Falta registrada';
+}
+function waText(a) {
+  const p = get('people', a.personId) || {};
+  const h = a.hasta || a.desde, n = diffDays(a.desde, h) + 1;
+  const L = ['*' + waTitle(a) + '*', 'Colaborador: ' + (p.nombre || '—')];
+  if (p.tarjeta) L.push('Tarjeta: ' + p.tarjeta);
+  if (p.rol) L.push('Puesto: ' + roleLabel(p) + (p.area ? ' (' + p.area + ')' : ''));
+  if (n === 1) L.push('Fecha: ' + DIAS[dow(a.desde)].toLowerCase() + ' ' + fmtLong(a.desde));
+  else L.push('Del ' + DIAS[dow(a.desde)].toLowerCase() + ' ' + fmtLong(a.desde) + ' al ' + DIAS[dow(h)].toLowerCase() + ' ' + fmtLong(h) + ' (' + n + ' días)');
+  if (a.tipo === 'vacaciones' && a.estado === 'solicitada') L.push('Fechas aproximadas, pendientes de confirmar por RRHH');
+  if (a.motivo) L.push('Motivo: ' + a.motivo);
+  else if (a.tipo === 'falta') L.push('Motivo: no se reportó');
+  return L.join('\n');
+}
+function shouldNotify(a, before) {
+  if (a.tipo === 'permiso') return !before || before.tipo !== 'permiso' || !a.comunicado;
+  if (a.tipo === 'vacaciones' && a.estado === 'confirmada') return !before || before.estado !== 'confirmada' || before.tipo !== 'vacaciones';
+  return false;
+}
+function waModal(id, auto) {
+  const a = get('absences', id); if (!a) return;
+  modalCtx = { kind: 'wa', id };
+  modal(`<h2>${auto ? 'Comunicar por WhatsApp' : 'Enviar por WhatsApp'}</h2>
+    <div class="hint">Revisa o ajusta el mensaje. Luego elige WhatsApp y marca los dos chats; puedes seleccionar ambos a la vez.</div>
+    <textarea id="wa-text" class="inp" style="min-height:170px">${esc(waText(a))}</textarea>
+    ${a.comunicado ? `<div class="small t-permiso">Ya enviado el ${new Date(a.comunicado).toLocaleString('es-GT', { dateStyle: 'medium', timeStyle: 'short' })}</div>` : ''}
+    <div class="modal-foot"><button class="btn" data-close>${auto ? 'Ahora no' : 'Cerrar'}</button><button class="btn" data-wact="copy">Copiar</button><button class="btn wa" data-wact="send">${ic('wa')}Enviar por WhatsApp</button></div>`, modalCtx);
+}
+async function waAction(act) {
+  const id = modalCtx.id, text = $('#wa-text').value.trim();
+  if (!text) return;
+  if (act === 'copy') {
+    try { await navigator.clipboard.writeText(text); toast('Mensaje copiado'); } catch (e) { $('#wa-text').select(); toast('Selecciona y copia el texto'); }
+    return;
+  }
+  const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  let ok = false;
+  if (mobile && navigator.share) {
+    try { await navigator.share({ text }); ok = true; } catch (e) { if (e && e.name === 'AbortError') return; }
+  }
+  if (!ok) {
+    try { await navigator.clipboard.writeText(text); } catch (e) { /* sin permiso de portapapeles */ }
+    window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent(text), '_blank', 'noopener');
+  }
+  const a = get('absences', id);
+  if (a) { const c = clone(a); c.comunicado = Date.now(); put('absences', c); }
+  closeModal(); render(); toast(ok ? 'Mensaje compartido' : 'WhatsApp abierto · el mensaje también quedó copiado');
 }
 
 /* Editores de parámetros */
@@ -669,7 +734,7 @@ function truckModal(id) {
 }
 function drawTruck() {
   const { t, isNew } = modalCtx;
-  const ch = activePeople().filter((p) => p.rol !== 'ayudante');
+  const ch = activePeople().filter(isChofer);
   modal(`<h2>${isNew ? 'Nuevo camión' : 'Editar camión: ' + esc(t.nombre)}</h2>
     <div class="grid2"><div class="field"><label for="t-n">Número o nombre</label><input id="t-n" class="inp" value="${esc(t.nombre)}" data-tchange="nombre"></div>
     <div class="field"><label for="t-m">Matrícula</label><input id="t-m" class="inp" value="${esc(t.matricula)}" data-tchange="matricula" style="text-transform:uppercase"></div></div>
@@ -691,7 +756,7 @@ function truckAction(act, el) {
 }
 function simpleModal(kind, id) {
   const defs = {
-    person: { col: 'people', title: 'colaborador', blank: { nombre: '', rol: 'ayudante', area: 'Despacho', activo: true } },
+    person: { col: 'people', title: 'colaborador', blank: { nombre: '', tarjeta: '', rol: 'ayudante', puesto: '', area: 'Despacho', activo: true } },
     client: { col: 'clients', title: 'cliente', blank: { nombre: '', usaParrillas: false, activo: true } },
     prod: { col: 'products', title: 'producto', blank: { codigo: '', desc: '', orden: products().length } },
     hol: { col: 'holidays', title: 'feriado', blank: { fecha: todayISO(), nombre: '', medio: false } },
@@ -705,7 +770,10 @@ function drawSimple() {
   let f = '';
   const inp = (k, l, type = 'text', extra = '') => `<div class="field"><label for="s-${k}">${l}</label><input id="s-${k}" class="inp" type="${type}" value="${esc(r[k] ?? '')}" data-schange="${k}" ${extra}></div>`;
   const tog = (k, l, a, b) => `<div class="field"><span class="flabel">${l}</span><div class="seg"><button type="button" class="btn ${r[k] ? 'navy' : ''}" data-sact="set" data-k="${k}" data-v="1">${a}</button><button type="button" class="btn ${!r[k] ? 'navy' : ''}" data-sact="set" data-k="${k}" data-v="">${b}</button></div></div>`;
-  if (sk === 'person') f = inp('nombre', 'Nombre') + `<div class="field"><span class="flabel">Rol</span><div class="chips">${Object.entries(ROLES).map(([k, l]) => `<button type="button" class="chip ${r.rol === k ? 'on' : ''}" data-sact="rol" data-k="${k}">${l}</button>`).join('')}</div></div>` + inp('area', 'Área') + tog('activo', 'Estado', 'Activo', 'Inactivo');
+  if (sk === 'person') f = inp('nombre', 'Nombre') + inp('tarjeta', 'Número de tarjeta', 'text', 'inputmode="numeric" autocomplete="off"')
+    + `<div class="field"><span class="flabel">Rol</span><div class="chips">${Object.entries(ROLES).map(([k, l]) => `<button type="button" class="chip ${r.rol === k ? 'on' : ''}" data-sact="rol" data-k="${k}">${l}</button>`).join('')}</div></div>`
+    + (r.rol === 'otro' ? inp('puesto', 'Puesto (empacador, verificadora…)', 'text', 'list="puestos"') + `<datalist id="puestos">${PUESTOS.map((x) => `<option value="${x}">`).join('')}</datalist>` : '')
+    + inp('area', 'Área') + tog('activo', 'Estado', 'Activo', 'Inactivo');
   if (sk === 'client') f = inp('nombre', 'Nombre') + tog('usaParrillas', 'Registra parrillas del pedido', 'Sí', 'No') + tog('activo', 'Estado', 'Activo', 'Inactivo');
   if (sk === 'prod') f = inp('codigo', 'Código') + inp('desc', 'Descripción (opcional)') + inp('orden', 'Orden en la lista', 'number');
   if (sk === 'hol') f = inp('fecha', 'Fecha', 'date') + inp('nombre', 'Nombre') + tog('medio', 'Duración', 'Medio día', 'Día completo');
@@ -715,13 +783,14 @@ function drawSimple() {
 function simpleAction(act, el) {
   const { r, def, sk } = modalCtx;
   if (act === 'set') r[el.dataset.k] = !!el.dataset.v;
-  else if (act === 'rol') r.rol = el.dataset.k;
+  else if (act === 'rol') { r.rol = el.dataset.k; if (r.rol === 'otro' && r.area === 'Despacho') r.area = ''; }
   else if (act === 'del') { const id = r.id; return confirmBox('¿Borrar este registro?', 'Borrar', true).then((ok) => { if (ok) del(def.col, id); render(); }); }
   else if (act === 'save') {
     if (sk === 'prod') { if (!String(r.codigo).trim()) return toast('Escribe el código'); r.orden = +r.orden || 0; }
     else if (!String(r.nombre).trim()) return toast('Escribe el nombre');
     if (sk === 'hol' && !r.fecha) return toast('Elige la fecha');
     if (r.nombre) r.nombre = r.nombre.trim();
+    if (sk === 'person') { r.tarjeta = String(r.tarjeta || '').trim(); if (r.rol !== 'otro') r.puesto = ''; }
     put(def.col, r); closeModal(); render(); return;
   }
   drawSimple();
@@ -754,7 +823,7 @@ async function applyTemplate() {
 
 /* ---------------- Eventos ---------------- */
 document.addEventListener('click', async (ev) => {
-  const el = ev.target.closest('[data-nav],[data-act],[data-close],[data-cf],[data-ract],[data-aact],[data-tact],[data-sact],[data-bg]');
+  const el = ev.target.closest('[data-nav],[data-act],[data-close],[data-cf],[data-ract],[data-aact],[data-tact],[data-sact],[data-wact],[data-bg]');
   if (!el) return;
   if (el.hasAttribute('data-bg')) { if (ev.target === el) { if (modalCtx && modalCtx.confirm) { modalCtx.confirm(false); } closeModal(); } return; }
   if (el.dataset.cf != null) { const cb = modalCtx && modalCtx.confirm; closeModal(); cb && cb(el.dataset.cf === '1'); return; }
@@ -762,6 +831,7 @@ document.addEventListener('click', async (ev) => {
   if (el.dataset.aact) return absAction(el.dataset.aact, el);
   if (el.dataset.tact) return truckAction(el.dataset.tact, el);
   if (el.dataset.sact) return simpleAction(el.dataset.sact, el);
+  if (el.dataset.wact) return waAction(el.dataset.wact);
   if (el.hasAttribute('data-close') && !el.dataset.nav) return closeModal();
   if (el.dataset.nav) { if (el.hasAttribute('data-close')) closeModal(); return go(el.dataset.nav); }
   const a = el.dataset.act, i = +el.dataset.i;
@@ -788,6 +858,7 @@ document.addEventListener('click', async (ev) => {
     case 'nota-del': if (await confirmBox('¿Borrar esta nota?', 'Borrar', true)) { const d = day(); d.notas.splice(i, 1); saveDay(d); } render(); break;
     case 'abs-new': absModal(null, el.dataset.tipo); break;
     case 'abs-edit': absModal(el.dataset.id); break;
+    case 'wa': waModal(el.dataset.id, false); break;
     case 'tl-prev': ui.tlStart = addDays(ui.tlStart, -28); render(); break;
     case 'tl-next': ui.tlStart = addDays(ui.tlStart, 28); render(); break;
     case 'tl-today': ui.tlStart = addDays(mondayOf(todayISO()), -7); render(); break;
