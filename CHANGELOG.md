@@ -2,6 +2,10 @@
 
 La versión visible en la app está en `js/app.js` (`VERSION` y `CHANGELOG`). Cada actualización sube la versión.
 
+## V.11 — 2026-11-25
+- Al programar una ruta, quien ya está asignado ese día (otra ruta, otro camión de la misma ruta o apoyo Z18) aparece en gris y tachado con el lugar donde está; quien tiene falta, permiso, vacaciones confirmadas o IGSS aparece en rojo tachado con el motivo. No se pueden elegir; los disponibles se muestran primero.
+- En “Chofer del día” esas personas aparecen deshabilitadas con el motivo.
+
 ## V.10 — 2026-11-25
 - Selector de camión al programar rutas ordenado de mayor a menor capacidad de parrillas (sin capacidad, al final).
 

@@ -2,8 +2,9 @@
 (function () {
 'use strict';
 
-const VERSION = 'V.10';
+const VERSION = 'V.11';
 const CHANGELOG = [
+  ['V.11', '2026-11-25', 'Al programar rutas, choferes y ayudantes ya asignados ese día (rutas, otro camión o apoyo Z18) o con falta, permiso, vacaciones o IGSS aparecen tachados y no se pueden elegir.'],
   ['V.10', '2026-11-25', 'Al programar rutas, los camiones se listan de mayor a menor capacidad de parrillas.'],
   ['V.9', '2026-11-25', 'Traslados Z18 en orden fijo: GMC, AXEL, GRANDE (otros camiones de Z18 después).'],
   ['V.8', '2026-11-25', 'Selector de camión en columnas (camión y matrícula, chofer asignado, parrillas) con buscador al programar rutas.'],
@@ -692,13 +693,15 @@ function drawRuta() {
   const usedT = trucksElsewhere(idx);
   const camH = r.camiones.map((c, ci) => {
     const t = get('trucks', c.truck);
+    const na = unavailable(idx, r, ci);
     let chOpts = choferes;
     if (t && t.choferModo === 'varios' && (t.choferes || []).length) chOpts = [...choferes.filter((p) => t.choferes.includes(p.id)), ...choferes.filter((p) => !t.choferes.includes(p.id))];
     return `<div class="truckrow">
       <div class="field"><span class="flabel">Camión ${r.camiones.length > 1 ? ci + 1 : ''}</span><button type="button" class="tpick-btn ${t ? '' : 'empty'}" data-ract="pick" data-ci="${ci}" aria-expanded="${modalCtx.pick === ci}">${t ? truckCols(t, usedT) : '<span class="muted">Elegir camión…</span>'}<span class="tpick-caret" aria-hidden="true">▾</span></button></div>
       ${modalCtx.pick === ci ? truckPicker(ci, tr, c.truck, usedT) : ''}
-      <div class="field"><label>Chofer del día</label><select class="sel" data-rchange="chofer" data-ci="${ci}"><option value="">Sin chofer</option>${chOpts.map((p) => `<option value="${p.id}" ${p.id === c.chofer ? 'selected' : ''}>${esc(p.nombre)}${abs.has(p.id) ? ' (ausente)' : ''}${used.has(p.id) ? ' (en otra ruta)' : ''}</option>`).join('')}</select></div>
-      <div class="field"><span class="flabel">Ayudantes</span><div class="chips">${ayud.map((p) => `<button type="button" class="chip ${(c.ayudantes || []).includes(p.id) ? 'on' : ''} ${abs.has(p.id) ? 'off' : ''}" data-ract="ayu" data-ci="${ci}" data-id="${p.id}" title="${abs.has(p.id) ? 'Ausente hoy' : used.has(p.id) ? 'En otra ruta' : ''}">${esc(p.nombre)}${used.has(p.id) ? ' ·' : ''}</button>`).join('')}</div></div>
+      <div class="field"><label>Chofer del día</label><select class="sel" data-rchange="chofer" data-ci="${ci}"><option value="">Sin chofer</option>${sortAvail(chOpts, na, c.chofer ? [c.chofer] : []).map((p) => { const u = na.get(p.id), cur = p.id === c.chofer; return `<option value="${p.id}" ${cur ? 'selected' : ''} ${u && !cur ? 'disabled' : ''}>${esc(p.nombre)}${u ? ' — ' + esc(u.label) : ''}</option>`; }).join('')}</select>${c.chofer && na.get(c.chofer) ? `<div class="hint warn">${esc(pname(c.chofer))}: ${esc(na.get(c.chofer).label)}</div>` : ''}</div>
+      <div class="field"><span class="flabel">Ayudantes</span><div class="chips">${sortAvail(ayud, new Map([...na, ...(c.chofer && !na.has(c.chofer) ? [[c.chofer, { kind: 'busy', label: 'es el chofer' }]] : [])]), c.ayudantes || []).map((p) => { const u = na.get(p.id) || (p.id === c.chofer ? { kind: 'busy', label: 'es el chofer' } : null), on = (c.ayudantes || []).includes(p.id); return `<button type="button" class="chip ${on ? 'on' : ''} ${u ? (u.kind === 'abs' ? 'off' : 'busy') : ''}" data-ract="ayu" data-ci="${ci}" data-id="${p.id}" ${u && !on ? 'disabled' : ''} title="${u ? esc(u.label) : 'Disponible'}"><span class="nm">${esc(p.nombre)}</span>${u ? `<small>${esc(u.label)}</small>` : ''}</button>`; }).join('')}</div>
+        <div class="hint">Tachados: ya asignados hoy o con falta, permiso, vacaciones o IGSS.</div></div>
       ${r.camiones.length > 1 ? `<div class="row"><button class="btn sm danger" data-ract="truck-del" data-ci="${ci}">Quitar camión</button></div>` : ''}
     </div>`;
   }).join('');
@@ -709,6 +712,24 @@ function drawRuta() {
     ${camH}
     <div class="row"><button class="btn sm" data-ract="truck-add">+ Otro camión</button></div>
     <div class="modal-foot">${idx != null ? '<button class="btn danger left" data-ract="del">Borrar ruta</button>' : ''}<button class="btn" data-close>Cancelar</button><button class="btn dark" data-ract="save">Guardar</button></div>`, modalCtx);
+}
+/* Personas no disponibles para el camión ci de la ruta en edición: ausentes o ya asignadas ese día */
+function unavailable(idx, r, ci) {
+  const m = new Map();
+  getDay(ui.date).rutas.forEach((rr, i) => {
+    if (i === idx) return;
+    const lbl = 'en ' + (rr.clientes.map(cname).join(' + ') || 'otra ruta');
+    rr.camiones.forEach((c) => { [c.chofer, ...(c.ayudantes || [])].forEach((id) => id && !m.has(id) && m.set(id, { kind: 'busy', label: lbl })); });
+  });
+  r.camiones.forEach((c, k) => { if (k !== ci) [c.chofer, ...(c.ayudantes || [])].forEach((id) => id && !m.has(id) && m.set(id, { kind: 'busy', label: 'en camión ' + (k + 1) })); });
+  (getDay(ui.date).z18.apoyo || []).forEach((a) => a.chofer && !m.has(a.chofer) && m.set(a.chofer, { kind: 'busy', label: 'apoyo Z18' }));
+  absencesOn(ui.date).filter((a) => a.tipo !== 'vacaciones' || a.estado !== 'solicitada').forEach((a) => m.set(a.personId, { kind: 'abs', label: TIPOS[a.tipo].label }));
+  return m;
+}
+/* Disponibles primero; los ya elegidos se quedan en su lugar */
+function sortAvail(list, na, chosen) {
+  const ok = (p) => !na.has(p.id) || chosen.includes(p.id);
+  return [...list.filter(ok), ...list.filter((p) => !ok(p))];
 }
 function trucksElsewhere(idx) {
   const s = new Set();
