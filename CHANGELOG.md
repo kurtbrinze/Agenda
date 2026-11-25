@@ -2,6 +2,9 @@
 
 La versión visible en la app está en `js/app.js` (`VERSION` y `CHANGELOG`). Cada actualización sube la versión.
 
+## V.7 — 2026-11-25
+- Plantillas de mensajes de WhatsApp en Ajustes, una por tipo (permiso, vacaciones autorizadas, solicitud de vacaciones, falta, IGSS), con variables ({nombre}, {tarjeta}, {puesto}, {fechas}, {motivo}…), vista previa y restaurar predeterminada. Se sincronizan entre equipos.
+
 ## V.6 — 2026-11-25
 - GRANDE (Z18) es el 205BDM Poison de Giovanni; se reasignan los viajes ya registrados.
 - Camiones: buscador (matrícula, nombre, chofer), filtros (En agenda, Fuera de agenda, Z18, Chofer varios) y casilla “En agenda”; solo los marcados aparecen al asignar rutas y apoyo.

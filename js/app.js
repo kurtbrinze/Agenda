@@ -2,8 +2,9 @@
 (function () {
 'use strict';
 
-const VERSION = 'V.6';
+const VERSION = 'V.7';
 const CHANGELOG = [
+  ['V.7', '2026-11-25', 'Plantillas de mensajes de WhatsApp por tipo de ausencia, con variables y vista previa (Ajustes).'],
   ['V.6', '2026-11-25', 'GRANDE (Z18) = 205BDM Poison. Camiones: buscador, filtros y casilla “En agenda”. Colaboradores: buscador y control de duplicados por tarjeta y nombre.'],
   ['V.5', '2026-11-25', 'Carga inicial desde Excel: 86 colaboradores con tarjeta y puesto, y 45 camiones con matrícula, capacidad y chofer. Puesto visible para todos los roles.'],
   ['V.4', '2026-11-25', 'Aviso por WhatsApp al autorizar permisos y vacaciones; número de tarjeta del colaborador; rol “Otro” con puesto (empacadores, verificadoras…) y filtro “Otros”.'],
@@ -304,6 +305,7 @@ function applyFilters() {
   });
 }
 document.addEventListener('input', (ev) => {
+  if (ev.target.dataset && 'waTpl' in ev.target.dataset) { ui.waDraft = ev.target.value; const pv = $('#wa-preview'); if (pv) pv.textContent = fillTemplate(ui.waDraft, waSampleVars(ui.waKind || 'permiso')); return; }
   const k = ev.target.dataset && ev.target.dataset.filter; if (!k) return;
   if (k === 'trucks') ui.truckQ = ev.target.value; else ui.peopleQ = ev.target.value;
   applyFilters();
@@ -585,6 +587,22 @@ function viewParams() {
 }
 
 /* ---------------- Vista: Ajustes ---------------- */
+function waSettings() {
+  const k = ui.waKind || 'permiso';
+  const tpl = ui.waDraft != null ? ui.waDraft : waTemplate(k);
+  const custom = !!get('templates', 'wa-' + k);
+  return `<div class="panel" id="wa-settings"><h2 style="font-size:16px">Mensajes de WhatsApp</h2>
+    <div class="hint">Escribe el mensaje una vez por tipo. Toca una variable para insertarla donde está el cursor. Si una variable queda vacía (por ejemplo, sin tarjeta), esa línea no se envía. Usa *texto* para negrita.</div>
+    <div class="tabs">${WA_KINDS.map(([kk, l]) => `<button class="tab ${kk === k ? 'on' : ''}" data-act="wa-kind" data-k="${kk}">${l}</button>`).join('')}</div>
+    <div class="grid2" style="align-items:start">
+      <div class="field"><label for="wa-tpl">Plantilla${custom ? '' : ' (predeterminada)'}</label><textarea id="wa-tpl" class="inp" style="min-height:190px;font-family:ui-monospace,Menlo,monospace;font-size:13px" data-wa-tpl>${esc(tpl)}</textarea>
+        <div class="chips">${WA_VARS.map(([v, l]) => `<button type="button" class="chip" data-act="wa-var" data-v="${v}" title="${l}">{${v}}</button>`).join('')}</div></div>
+      <div class="field"><span class="flabel">Vista previa (ejemplo)</span><div class="card" id="wa-preview" style="white-space:pre-wrap;font-size:14px;line-height:1.5;background:#E7F6EC;border-color:#BFE3CB">${esc(fillTemplate(tpl, waSampleVars(k)))}</div></div>
+    </div>
+    <div class="row"><button class="btn dark" data-act="wa-save">Guardar plantilla</button>${custom ? '<button class="btn" data-act="wa-reset">Restaurar predeterminada</button>' : ''}</div>
+  </div>`;
+}
+
 function viewSettings() {
   const key = localStorage.getItem(LS_KEY) || '';
   const last = localStorage.getItem(LS_LASTSYNC);
@@ -597,6 +615,7 @@ function viewSettings() {
       ${key ? '<button class="btn" data-act="sync-now">Sincronizar ahora</button><button class="btn danger" data-act="sync-off">Desactivar</button>' : ''}</div>
     <div class="small muted">${key ? (last ? 'Última sincronización: ' + new Date(+last).toLocaleString('es-GT') : 'Aún no se sincroniza.') : 'Sincronización desactivada: los datos quedan solo en este equipo.'}</div>
   </div>
+  ${waSettings()}
   <div class="panel"><h2 style="font-size:16px">Exportar agenda a PDF</h2>
     <div class="hint">Se abre la vista de impresión: elige “Guardar como PDF”.</div>
     <div class="row">
@@ -767,18 +786,50 @@ function waTitle(a) {
   if (a.tipo === 'igss') return 'Suspensión IGSS';
   return 'Falta registrada';
 }
-function waText(a) {
+/* Plantillas de WhatsApp: se guardan en "templates" con id wa-<clave> para sincronizarse */
+const WA_KINDS = [
+  ['permiso', 'Permiso autorizado'], ['vacaciones', 'Vacaciones autorizadas'], ['solicitud', 'Solicitud de vacaciones'],
+  ['falta', 'Falta'], ['igss', 'Suspensión IGSS'],
+];
+const WA_DEFAULT = {
+  permiso: '*Permiso autorizado*\nColaborador: {nombre}\nTarjeta: {tarjeta}\nPuesto: {puesto}\n{fechas}\nMotivo: {motivo}',
+  vacaciones: '*Vacaciones autorizadas*\nColaborador: {nombre}\nTarjeta: {tarjeta}\nPuesto: {puesto}\n{fechas}\nObservaciones: {motivo}',
+  solicitud: '*Solicitud de vacaciones*\nColaborador: {nombre}\nTarjeta: {tarjeta}\nPuesto: {puesto}\n{fechas}\nFechas aproximadas, pendientes de confirmar por RRHH',
+  falta: '*Falta registrada*\nColaborador: {nombre}\nTarjeta: {tarjeta}\nPuesto: {puesto}\n{fechas}\nMotivo: {motivo}',
+  igss: '*Suspensión IGSS*\nColaborador: {nombre}\nTarjeta: {tarjeta}\nPuesto: {puesto}\n{fechas}\nDetalle: {motivo}',
+};
+const WA_VARS = [
+  ['nombre', 'Nombre'], ['tarjeta', 'Tarjeta'], ['puesto', 'Puesto'], ['area', 'Área'], ['fechas', 'Fechas (frase completa)'],
+  ['desde', 'Fecha inicio'], ['hasta', 'Fecha fin'], ['dias', 'Días'], ['motivo', 'Motivo'], ['tipo', 'Tipo'], ['hoy', 'Fecha de hoy'],
+];
+function waKind(a) { return a.tipo === 'vacaciones' ? (a.estado === 'solicitada' ? 'solicitud' : 'vacaciones') : a.tipo; }
+function waTemplate(kind) { const t = get('templates', 'wa-' + kind); return t && typeof t.texto === 'string' ? t.texto : WA_DEFAULT[kind]; }
+function waVars(a) {
   const p = get('people', a.personId) || {};
   const h = a.hasta || a.desde, n = diffDays(a.desde, h) + 1;
-  const L = ['*' + waTitle(a) + '*', 'Colaborador: ' + (p.nombre || '—')];
-  if (p.tarjeta) L.push('Tarjeta: ' + p.tarjeta);
-  if (p.rol) L.push('Puesto: ' + puestoOf(p) + (p.area ? ' (' + p.area + ')' : ''));
-  if (n === 1) L.push('Fecha: ' + DIAS[dow(a.desde)].toLowerCase() + ' ' + fmtLong(a.desde));
-  else L.push('Del ' + DIAS[dow(a.desde)].toLowerCase() + ' ' + fmtLong(a.desde) + ' al ' + DIAS[dow(h)].toLowerCase() + ' ' + fmtLong(h) + ' (' + n + ' días)');
-  if (a.tipo === 'vacaciones' && a.estado === 'solicitada') L.push('Fechas aproximadas, pendientes de confirmar por RRHH');
-  if (a.motivo) L.push('Motivo: ' + a.motivo);
-  else if (a.tipo === 'falta') L.push('Motivo: no se reportó');
-  return L.join('\n');
+  const largo = (iso) => DIAS[dow(iso)].toLowerCase() + ' ' + fmtLong(iso);
+  return {
+    nombre: p.nombre || '', tarjeta: p.tarjeta || '', puesto: p.rol ? puestoOf(p) : '', area: p.area || '',
+    fechas: n === 1 ? 'Fecha: ' + largo(a.desde) : 'Del ' + largo(a.desde) + ' al ' + largo(h) + ' (' + n + ' días)',
+    desde: largo(a.desde), hasta: largo(h), dias: String(n),
+    motivo: a.motivo || (a.tipo === 'falta' ? 'no se reportó' : ''), tipo: TIPOS[a.tipo].label, hoy: fmtLong(todayISO()),
+  };
+}
+/* Reemplaza {variables}; una línea cuyas variables quedan todas vacías se omite */
+function fillTemplate(tpl, vars) {
+  return tpl.split('\n').map((line) => {
+    const keys = [...line.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).filter((k) => k in vars);
+    if (keys.length && keys.every((k) => !vars[k])) return null;
+    return line.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? vars[k] : m));
+  }).filter((l) => l !== null).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+function waTitle(a) { return (WA_KINDS.find(([k]) => k === waKind(a)) || [, ''])[1]; }
+function waText(a) { return fillTemplate(waTemplate(waKind(a)), waVars(a)); }
+const WA_SAMPLE = { personId: '', tipo: 'permiso', desde: todayISO(), hasta: todayISO(), motivo: 'Cita médica', estado: 'confirmada' };
+function waSampleVars(kind) {
+  const tipo = kind === 'solicitud' || kind === 'vacaciones' ? 'vacaciones' : kind;
+  const a = Object.assign({}, WA_SAMPLE, { tipo, estado: kind === 'solicitud' ? 'solicitada' : 'confirmada', hasta: tipo === 'vacaciones' ? addDays(todayISO(), 14) : todayISO(), motivo: tipo === 'vacaciones' ? '' : WA_SAMPLE.motivo });
+  return Object.assign(waVars(a), { nombre: 'María López', tarjeta: '10452', puesto: 'Verificadora', area: 'Despacho' });
 }
 function shouldNotify(a, before) {
   if (a.tipo === 'permiso') return !before || before.tipo !== 'permiso' || !a.comunicado;
@@ -789,7 +840,7 @@ function waModal(id, auto) {
   const a = get('absences', id); if (!a) return;
   modalCtx = { kind: 'wa', id };
   modal(`<h2>${auto ? 'Comunicar por WhatsApp' : 'Enviar por WhatsApp'}</h2>
-    <div class="hint">Revisa o ajusta el mensaje. Luego elige WhatsApp y marca los dos chats; puedes seleccionar ambos a la vez.</div>
+    <div class="hint">Mensaje armado con la plantilla “${esc(waTitle(a))}”. Luego elige WhatsApp y marca los dos chats; puedes seleccionar ambos a la vez. <a href="#" data-act="wa-edit-tpl" data-id="${a.id}">Editar plantilla</a></div>
     <textarea id="wa-text" class="inp" style="min-height:170px">${esc(waText(a))}</textarea>
     ${a.comunicado ? `<div class="small t-permiso">Ya enviado el ${new Date(a.comunicado).toLocaleString('es-GT', { dateStyle: 'medium', timeStyle: 'short' })}</div>` : ''}
     <div class="modal-foot"><button class="btn" data-close>${auto ? 'Ahora no' : 'Cerrar'}</button><button class="btn" data-wact="copy">Copiar</button><button class="btn wa" data-wact="send">${ic('wa')}Enviar por WhatsApp</button></div>`, modalCtx);
@@ -928,6 +979,7 @@ async function applyTemplate() {
 document.addEventListener('click', async (ev) => {
   const el = ev.target.closest('[data-nav],[data-act],[data-close],[data-cf],[data-ract],[data-aact],[data-tact],[data-sact],[data-wact],[data-bg]');
   if (!el) return;
+  if (el.tagName === 'A' && el.getAttribute('href') === '#') ev.preventDefault();
   if (el.hasAttribute('data-bg')) { if (ev.target === el) { if (modalCtx && modalCtx.confirm) { modalCtx.confirm(false); } closeModal(); } return; }
   if (el.dataset.cf != null) { const cb = modalCtx && modalCtx.confirm; closeModal(); cb && cb(el.dataset.cf === '1'); return; }
   if (el.dataset.ract) return rutaAction(el.dataset.ract, el);
@@ -962,6 +1014,11 @@ document.addEventListener('click', async (ev) => {
     case 'abs-new': absModal(null, el.dataset.tipo); break;
     case 'abs-edit': absModal(el.dataset.id); break;
     case 'wa': waModal(el.dataset.id, false); break;
+    case 'wa-kind': ui.waKind = el.dataset.k; ui.waDraft = null; render(); document.getElementById('wa-settings').scrollIntoView({ block: 'start' }); break;
+    case 'wa-var': { const ta = $('#wa-tpl'); const ins = '{' + el.dataset.v + '}'; const a0 = ta.selectionStart ?? ta.value.length, b0 = ta.selectionEnd ?? ta.value.length; ta.value = ta.value.slice(0, a0) + ins + ta.value.slice(b0); ta.focus(); ta.setSelectionRange(a0 + ins.length, a0 + ins.length); ta.dispatchEvent(new Event('input', { bubbles: true })); break; }
+    case 'wa-save': { const k = ui.waKind || 'permiso'; const v = $('#wa-tpl').value.trim(); if (!v) return toast('La plantilla está vacía'); put('templates', { id: 'wa-' + k, texto: v }); ui.waDraft = null; toast('Plantilla guardada'); render(); document.getElementById('wa-settings').scrollIntoView({ block: 'start' }); break; }
+    case 'wa-reset': if (await confirmBox('¿Volver a la plantilla predeterminada de este tipo?', 'Restaurar', true)) { del('templates', 'wa-' + (ui.waKind || 'permiso')); ui.waDraft = null; } render(); document.getElementById('wa-settings').scrollIntoView({ block: 'start' }); break;
+    case 'wa-edit-tpl': { const a = get('absences', el.dataset.id); closeModal(); ui.waKind = a ? waKind(a) : 'permiso'; ui.waDraft = null; go('ajustes'); setTimeout(() => { const w = document.getElementById('wa-settings'); w && w.scrollIntoView({ block: 'start' }); }, 50); break; }
     case 'tl-prev': ui.tlStart = addDays(ui.tlStart, -28); render(); break;
     case 'tl-next': ui.tlStart = addDays(ui.tlStart, 28); render(); break;
     case 'tl-today': ui.tlStart = addDays(mondayOf(todayISO()), -7); render(); break;
