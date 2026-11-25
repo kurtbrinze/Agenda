@@ -2,8 +2,9 @@
 (function () {
 'use strict';
 
-const VERSION = 'V.7';
+const VERSION = 'V.8';
 const CHANGELOG = [
+  ['V.8', '2026-11-25', 'Selector de camión en columnas (camión y matrícula, chofer asignado, parrillas) con buscador al programar rutas.'],
   ['V.7', '2026-11-25', 'Plantillas de mensajes de WhatsApp por tipo de ausencia, con variables y vista previa (Ajustes).'],
   ['V.6', '2026-11-25', 'GRANDE (Z18) = 205BDM Poison. Camiones: buscador, filtros y casilla “En agenda”. Colaboradores: buscador y control de duplicados por tarjeta y nombre.'],
   ['V.5', '2026-11-25', 'Carga inicial desde Excel: 86 colaboradores con tarjeta y puesto, y 45 camiones con matrícula, capacidad y chofer. Puesto visible para todos los roles.'],
@@ -305,6 +306,11 @@ function applyFilters() {
   });
 }
 document.addEventListener('input', (ev) => {
+  if (ev.target.dataset && 'tpick' in ev.target.dataset) {
+    const words = norm(ev.target.value).split(' ').filter(Boolean);
+    ev.target.closest('.tpick').querySelectorAll('.tpick-row').forEach((b) => { b.style.display = words.every((w) => b.dataset.s.includes(w)) ? '' : 'none'; });
+    return;
+  }
   if (ev.target.dataset && 'waTpl' in ev.target.dataset) { ui.waDraft = ev.target.value; const pv = $('#wa-preview'); if (pv) pv.textContent = fillTemplate(ui.waDraft, waSampleVars(ui.waKind || 'permiso')); return; }
   const k = ev.target.dataset && ev.target.dataset.filter; if (!k) return;
   if (k === 'trucks') ui.truckQ = ev.target.value; else ui.peopleQ = ev.target.value;
@@ -647,8 +653,10 @@ function openMoreMenu() {
 /* ---------------- Modales ---------------- */
 let modalCtx = null;
 function modal(html, ctx = null) {
+  const prev = $('#modal-root .modal'), keep = prev && ctx && modalCtx === ctx ? prev.scrollTop : 0;
   modalCtx = ctx;
   $('#modal-root').innerHTML = `<div class="modal-bg" data-bg><div class="modal" role="dialog" aria-modal="true">${html}</div></div>`;
+  if (keep) { $('#modal-root .modal').scrollTop = keep; return; }
   const f = $('#modal-root .modal input:not([type=hidden]):not([type=checkbox]), #modal-root .modal select');
   if (f && window.matchMedia('(min-width: 900px)').matches) f.focus();
 }
@@ -664,7 +672,7 @@ function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.ad
 function rutaModal(idx) {
   const day = getDay(ui.date);
   const r = idx == null ? { id: uid(), clientes: [], parrillas: '', camiones: [{ truck: '', chofer: '', ayudantes: [] }] } : clone(day.rutas[idx]);
-  modalCtx = { kind: 'ruta', idx, r };
+  modalCtx = { kind: 'ruta', idx, r, pick: null };
   drawRuta();
 }
 function drawRuta() {
@@ -677,13 +685,15 @@ function drawRuta() {
   const ayud = activePeople().filter(isAyud);
   const tr = trucks().filter((t) => (truckOn(t) && (!(t.uso || []).length || (t.uso || []).includes('rutas') || (t.uso || []).includes('apoyo'))) || r.camiones.some((c) => c.truck === t.id));
   const used = assignedElsewhere(idx);
+  const usedT = trucksElsewhere(idx);
   const camH = r.camiones.map((c, ci) => {
     const t = get('trucks', c.truck);
     let chOpts = choferes;
     if (t && t.choferModo === 'varios' && (t.choferes || []).length) chOpts = [...choferes.filter((p) => t.choferes.includes(p.id)), ...choferes.filter((p) => !t.choferes.includes(p.id))];
-    return `<div class="truckrow"><div class="grid2">
-      <div class="field"><label>Camión ${r.camiones.length > 1 ? ci + 1 : ''}</label><select class="sel" data-rchange="truck" data-ci="${ci}"><option value="">Sin camión</option>${tr.map((t) => `<option value="${t.id}" ${t.id === c.truck ? 'selected' : ''}>${esc(t.nombre)}${t.capacidad ? ' · ' + t.capacidad + ' parr.' : ''}</option>`).join('')}</select></div>
-      <div class="field"><label>Chofer</label><select class="sel" data-rchange="chofer" data-ci="${ci}"><option value="">Sin chofer</option>${chOpts.map((p) => `<option value="${p.id}" ${p.id === c.chofer ? 'selected' : ''}>${esc(p.nombre)}${abs.has(p.id) ? ' (ausente)' : ''}${used.has(p.id) ? ' (en otra ruta)' : ''}</option>`).join('')}</select></div></div>
+    return `<div class="truckrow">
+      <div class="field"><span class="flabel">Camión ${r.camiones.length > 1 ? ci + 1 : ''}</span><button type="button" class="tpick-btn ${t ? '' : 'empty'}" data-ract="pick" data-ci="${ci}" aria-expanded="${modalCtx.pick === ci}">${t ? truckCols(t, usedT) : '<span class="muted">Elegir camión…</span>'}<span class="tpick-caret" aria-hidden="true">▾</span></button></div>
+      ${modalCtx.pick === ci ? truckPicker(ci, tr, c.truck, usedT) : ''}
+      <div class="field"><label>Chofer del día</label><select class="sel" data-rchange="chofer" data-ci="${ci}"><option value="">Sin chofer</option>${chOpts.map((p) => `<option value="${p.id}" ${p.id === c.chofer ? 'selected' : ''}>${esc(p.nombre)}${abs.has(p.id) ? ' (ausente)' : ''}${used.has(p.id) ? ' (en otra ruta)' : ''}</option>`).join('')}</select></div>
       <div class="field"><span class="flabel">Ayudantes</span><div class="chips">${ayud.map((p) => `<button type="button" class="chip ${(c.ayudantes || []).includes(p.id) ? 'on' : ''} ${abs.has(p.id) ? 'off' : ''}" data-ract="ayu" data-ci="${ci}" data-id="${p.id}" title="${abs.has(p.id) ? 'Ausente hoy' : used.has(p.id) ? 'En otra ruta' : ''}">${esc(p.nombre)}${used.has(p.id) ? ' ·' : ''}</button>`).join('')}</div></div>
       ${r.camiones.length > 1 ? `<div class="row"><button class="btn sm danger" data-ract="truck-del" data-ci="${ci}">Quitar camión</button></div>` : ''}
     </div>`;
@@ -696,6 +706,27 @@ function drawRuta() {
     <div class="row"><button class="btn sm" data-ract="truck-add">+ Otro camión</button></div>
     <div class="modal-foot">${idx != null ? '<button class="btn danger left" data-ract="del">Borrar ruta</button>' : ''}<button class="btn" data-close>Cancelar</button><button class="btn dark" data-ract="save">Guardar</button></div>`, modalCtx);
 }
+function trucksElsewhere(idx) {
+  const s = new Set();
+  getDay(ui.date).rutas.forEach((r, i) => { if (i !== idx) r.camiones.forEach((c) => c.truck && s.add(c.truck)); });
+  return s;
+}
+function truckChofer(t) {
+  if (t.choferModo === 'varios') return '<span class="tag navy">VARIOS</span>' + ((t.choferes || []).length ? ' <span class="muted small">' + esc(t.choferes.map(pname).join(', ')) + '</span>' : '');
+  return t.chofer ? esc(pname(t.chofer)) : '<span class="muted">—</span>';
+}
+function truckCols(t, usedT) {
+  return `<span class="tc-name"><b>${esc(t.nombre)}</b>${t.matricula && t.matricula !== t.nombre ? `<small class="mono">${esc(t.matricula)}</small>` : ''}${usedT && usedT.has(t.id) ? '<small class="t-falta">en otra ruta</small>' : ''}</span><span class="tc-chofer">${truckChofer(t)}</span><span class="tc-parr">${t.capacidad ? '<b>' + esc(t.capacidad) + '</b><small>parr.</small>' : '<span class="muted">—</span>'}</span>`;
+}
+function truckPicker(ci, tr, current, usedT) {
+  return `<div class="tpick" role="listbox" aria-label="Camiones">
+    <input class="inp" type="search" placeholder="Buscar camión, matrícula o chofer…" data-tpick aria-label="Buscar camión">
+    <div class="tpick-head"><span>Camión / matrícula</span><span>Chofer asignado</span><span style="text-align:right">Parrillas</span></div>
+    <div class="tpick-list">
+      ${tr.map((t) => `<button type="button" class="tpick-row ${t.id === current ? 'on' : ''}" data-ract="pickset" data-ci="${ci}" data-id="${t.id}" data-s="${esc(norm([t.nombre, t.matricula, t.choferModo === 'varios' ? 'varios' : pname(t.chofer), (t.choferes || []).map(pname).join(' ')].join(' ')))}">${truckCols(t, usedT)}</button>`).join('')}
+      <button type="button" class="tpick-row" data-ract="pickset" data-ci="${ci}" data-id="" data-s="sin camion"><span class="muted">Sin camión</span></button>
+    </div></div>`;
+}
 function assignedElsewhere(idx) {
   const day = getDay(ui.date); const s = new Set();
   day.rutas.forEach((r, i) => { if (i === idx) return; r.camiones.forEach((c) => { if (c.chofer) s.add(c.chofer); (c.ayudantes || []).forEach((a) => s.add(a)); }); });
@@ -707,7 +738,13 @@ function rutaAction(act, el) {
   if (act === 'cli') { const id = el.dataset.id; r.clientes = r.clientes.includes(id) ? r.clientes.filter((x) => x !== id) : [...r.clientes, id]; }
   else if (act === 'cli-new') { const n = prompt('Nombre del nuevo cliente'); if (n && n.trim()) { const c = { id: uid(), nombre: n.trim().toUpperCase(), usaParrillas: false, activo: true }; put('clients', c); r.clientes.push(c.id); } }
   else if (act === 'ayu') { const id = el.dataset.id, c = r.camiones[ci]; c.ayudantes = (c.ayudantes || []).includes(id) ? c.ayudantes.filter((x) => x !== id) : [...(c.ayudantes || []), id]; }
-  else if (act === 'truck-add') r.camiones.push({ truck: '', chofer: '', ayudantes: [] });
+  else if (act === 'pick') modalCtx.pick = modalCtx.pick === ci ? null : ci;
+  else if (act === 'pickset') {
+    const c = r.camiones[ci]; c.truck = el.dataset.id; modalCtx.pick = null;
+    const t = get('trucks', c.truck);
+    if (t && t.choferModo !== 'varios' && t.chofer) c.chofer = t.chofer;
+  }
+  else if (act === 'truck-add') { r.camiones.push({ truck: '', chofer: '', ayudantes: [] }); modalCtx.pick = r.camiones.length - 1; }
   else if (act === 'truck-del') r.camiones.splice(ci, 1);
   else if (act === 'save') {
     if (!r.clientes.length) return toast('Elige al menos un cliente');

@@ -2,6 +2,11 @@
 
 La versión visible en la app está en `js/app.js` (`VERSION` y `CHANGELOG`). Cada actualización sube la versión.
 
+## V.8 — 2026-11-25
+- Al programar una ruta, el camión se elige de una lista en columnas: camión y matrícula, chofer asignado y parrillas, con buscador. Marca los camiones ya usados en otra ruta del día.
+- Al elegir un camión con chofer fijo, se asigna ese chofer.
+- La ventana de la ruta conserva la posición al marcar ayudantes.
+
 ## V.7 — 2026-11-25
 - Plantillas de mensajes de WhatsApp en Ajustes, una por tipo (permiso, vacaciones autorizadas, solicitud de vacaciones, falta, IGSS), con variables ({nombre}, {tarjeta}, {puesto}, {fechas}, {motivo}…), vista previa y restaurar predeterminada. Se sincronizan entre equipos.
 
