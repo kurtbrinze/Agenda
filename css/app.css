@@ -120,6 +120,37 @@ textarea.inp{height:auto;min-height:70px;padding:8px 10px;resize:vertical;line-h
 .nota{position:relative;font-size:14px;line-height:1.5;white-space:pre-wrap;padding-right:40px}
 .nota .icon-btn{position:absolute;top:4px;right:4px}
 
+/* Selector en columnas */
+.pk-truck{--cols:minmax(0,1.1fr) minmax(0,1.3fr) 64px}
+.pk-person{--cols:minmax(0,1.25fr) minmax(0,1.2fr) minmax(0,.95fr)}
+.pk-prod{--cols:96px minmax(0,1fr)}
+.pk-btn{display:grid;grid-template-columns:var(--cols) 16px;gap:10px;align-items:center;width:100%;min-height:44px;border:1px solid var(--btnline);background:var(--card);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:14px;text-align:left}
+.pk-btn.sum{grid-template-columns:minmax(0,1fr) 16px}
+.pk-btn.open{border-color:#B9A57A;outline:2px solid #E3D6B9}
+.pk-sum{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pk-caret{color:var(--muted);font-size:12px;text-align:right}
+.pk-panel{border:1px solid var(--btnline);border-radius:10px;background:#FFFDF7;padding:8px;display:flex;flex-direction:column;gap:6px;margin-top:6px;width:100%}
+.pk-head,.pk-row{display:grid;grid-template-columns:var(--cols);gap:10px;align-items:center;text-align:left;width:100%}
+.pk-panel.multi .pk-head,.pk-panel.multi .pk-row{grid-template-columns:22px var(--cols)}
+.pk-head{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.04em;text-transform:uppercase;padding:2px 10px}
+.pk-list{max-height:300px;overflow-y:auto;display:flex;flex-direction:column;border-top:1px solid var(--cardline)}
+.pk-row{border:0;border-bottom:1px solid #EFE6D2;background:transparent;padding:7px 10px;cursor:pointer;font-size:14px;min-height:44px}
+.pk-row:hover:not(:disabled){background:#F3EAD6}
+.pk-row.on{background:#E4E8F0}
+.pk-row:disabled{cursor:not-allowed}
+.pk-row.dis .pk-c0 b{text-decoration:line-through;color:#9A8D72}
+.pk-row:disabled .pk-c1{color:#9A8D72}
+.pk-chk{width:20px;height:20px;border:1.5px solid var(--btnline);border-radius:5px;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;background:var(--card)}
+.pk-row.on .pk-chk{background:var(--navy);border-color:var(--navy)}
+.pk-c{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.pk-c0{display:flex;flex-direction:column;line-height:1.25}
+.pk-c0 small{font-size:11px;color:var(--muted)}
+.pk-truck .pk-c2{display:flex;flex-direction:column;align-items:flex-end;text-align:right;line-height:1.2}
+.pk-truck .pk-c2 small{font-size:10px;color:var(--muted)}
+.pk-truck .pk-head .pk-c2{align-items:flex-end}
+.pk-cell{min-width:0}
+.emp-row.pk-open,.apo-row.pk-open{grid-template-columns:1fr!important}
+
 /* Reuniones */
 .mtg{display:flex;align-items:center;gap:10px;padding:8px 10px}
 .mtg-main{flex:1;display:flex;gap:12px;align-items:flex-start;background:none;border:0;padding:0;text-align:left;cursor:pointer;min-width:0}

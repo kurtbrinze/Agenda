@@ -2,8 +2,9 @@
 (function () {
 'use strict';
 
-const VERSION = 'V.13';
+const VERSION = 'V.14';
 const CHANGELOG = [
+  ['V.14', '2026-11-26', 'Selección de colaboradores, camiones y productos en tablas con columnas y buscador (rutas, ayudantes, apoyo Z18, ausencias, camiones, empaques y consultas).'],
   ['V.13', '2026-11-25', 'Reuniones presenciales o virtuales: hora, lugar o enlace, ID y código de acceso; lectura automática de la invitación, botón Unirse, copiar datos, agregar al calendario (.ics) y consulta de reuniones.'],
   ['V.12', '2026-11-25', 'Tabla de camiones en Parámetros ordenada de mayor a menor capacidad de parrillas.'],
   ['V.11', '2026-11-25', 'Al programar rutas, choferes y ayudantes ya asignados ese día (rutas, otro camión o apoyo Z18) o con falta, permiso, vacaciones o IGSS aparecen tachados y no se pueden elegir.'],
@@ -314,9 +315,9 @@ function applyFilters() {
   });
 }
 document.addEventListener('input', (ev) => {
-  if (ev.target.dataset && 'tpick' in ev.target.dataset) {
+  if (ev.target.dataset && 'pksearch' in ev.target.dataset) {
     const words = norm(ev.target.value).split(' ').filter(Boolean);
-    ev.target.closest('.tpick').querySelectorAll('.tpick-row').forEach((b) => { b.style.display = words.every((w) => b.dataset.s.includes(w)) ? '' : 'none'; });
+    ev.target.closest('.pk-panel').querySelectorAll('.pk-row').forEach((b) => { b.style.display = words.every((w) => (b.dataset.s || '').includes(w)) ? '' : 'none'; });
     return;
   }
   if (ev.target.dataset && 'waTpl' in ev.target.dataset) { ui.waDraft = ev.target.value; const pv = $('#wa-preview'); if (pv) pv.textContent = fillTemplate(ui.waDraft, waSampleVars(ui.waKind || 'permiso')); return; }
@@ -327,6 +328,7 @@ document.addEventListener('input', (ev) => {
 
 function go(view, opts = {}) {
   if (view === 'mas') return openMoreMenu();
+  openPick = null;
   ui.view = view;
   Object.assign(ui, opts);
   render();
@@ -380,8 +382,8 @@ function viewDay() {
   }).join('');
 
   const prods = products();
-  const emp = day.empaques.map((e, i) => `<div class="emp-row">
-      <select class="sel" data-change="emp-prod" data-i="${i}" aria-label="Producto">${prods.map((p) => `<option value="${p.id}" ${p.id === e.prod ? 'selected' : ''}>${esc(p.codigo)}</option>`).join('')}</select>
+  const emp = day.empaques.map((e, i) => `<div class="emp-row ${openPick === 'de:' + i ? 'pk-open' : ''}">
+      <div class="pk-cell">${picker('de:' + i, { layout: 'prod', compact: true, label: 'Producto', rows: prods.map(prodRow), sel: e.prod, placeholder: 'Producto…' })}</div>
       <input class="inp" value="${esc(e.cant)}" placeholder="Cantidad" data-change="emp-cant" data-i="${i}" aria-label="Cantidad" inputmode="text">
       <button class="icon-btn" data-act="emp-del" data-i="${i}" aria-label="Quitar">${ic('x')}</button></div>`).join('');
 
@@ -390,9 +392,10 @@ function viewDay() {
       <input id="z-${t.id}" class="inp num" type="number" min="0" inputmode="numeric" value="${day.z18.viajes[t.id] ?? ''}" placeholder="0" data-change="z18-v" data-t="${t.id}"></div>`).join('');
   const apoyoTrucks = trucks().filter((t) => truckOn(t) || (day.z18.apoyo || []).some((a) => a.truck === t.id));
   const choferes = activePeople().filter(isChofer);
-  const apo = (day.z18.apoyo || []).map((a, i) => `<div class="apo-row">
-      <select class="sel" data-change="apo-truck" data-i="${i}" aria-label="Camión de apoyo"><option value="">Camión…</option>${apoyoTrucks.map((t) => `<option value="${t.id}" ${t.id === a.truck ? 'selected' : ''}>${esc(t.nombre)}</option>`).join('')}</select>
-      <select class="sel" data-change="apo-chofer" data-i="${i}" aria-label="Chofer de apoyo"><option value="">Chofer…</option>${choferes.map((p) => `<option value="${p.id}" ${p.id === a.chofer ? 'selected' : ''}>${esc(p.nombre)}${absIds.has(p.id) ? ' (ausente)' : ''}</option>`).join('')}</select>
+  const naApo = (a) => { const m = unavailable(-1, { camiones: [] }, 0); if (a.chofer && m.get(a.chofer) && m.get(a.chofer).label === 'apoyo Z18') m.delete(a.chofer); return m; };
+  const apo = (day.z18.apoyo || []).map((a, i) => `<div class="apo-row ${openPick && openPick.endsWith(':' + i) && /^d[tc]:/.test(openPick) ? 'pk-open' : ''}">
+      <div class="pk-cell">${picker('dt:' + i, { layout: 'truck', compact: true, label: 'Camión de apoyo', rows: apoyoTrucks.slice().sort(byCapacity).map((t) => truckRow(t)), sel: a.truck, placeholder: 'Camión…', none: 'Sin camión' })}</div>
+      <div class="pk-cell">${(() => { const m = naApo(a); return picker('dc:' + i, { layout: 'person', compact: true, label: 'Chofer de apoyo', rows: sortAvail(choferes, m, a.chofer ? [a.chofer] : []).map((p) => personRow(p, m.get(p.id))), sel: a.chofer, placeholder: 'Chofer…', none: 'Sin chofer' }); })()}</div>
       <input class="inp num" type="number" min="0" value="${a.viajes ?? ''}" placeholder="0" data-change="apo-v" data-i="${i}" aria-label="Viajes">
       <button class="icon-btn" data-act="apo-del" data-i="${i}" aria-label="Quitar apoyo">${ic('x')}</button></div>`).join('');
 
@@ -513,7 +516,7 @@ function viewQueries() {
   let body = '';
   if (q.tipo === 'colaborador') {
     const years = yearsAvailable();
-    body = `<div class="row"><select class="sel" style="max-width:260px" data-change="q-person" aria-label="Colaborador"><option value="">Elige colaborador…</option>${people().map((p) => `<option value="${p.id}" ${p.id === q.person ? 'selected' : ''}>${esc(p.nombre)}</option>`).join('')}</select>
+    body = `<div class="row" style="align-items:flex-start"><div style="flex:1;min-width:260px;max-width:560px">${picker('qp', { layout: 'person', label: 'Colaborador', rows: people().map((p) => personRow(p, absentIds(todayISO()).has(p.id) ? { kind: 'abs', label: 'Ausente hoy' } : null, { dis: false })), sel: q.person, placeholder: 'Elegir colaborador…' })}</div>
       <select class="sel" style="max-width:120px" data-change="q-year" aria-label="Año">${years.map((y) => `<option ${y === q.year ? 'selected' : ''}>${y}</option>`).join('')}</select></div>`;
     if (q.person) {
       const abs = all('absences').filter((a) => a.personId === q.person && (a.desde.startsWith(q.year) || (a.hasta || '').startsWith(q.year))).sort((a, b) => a.desde.localeCompare(b.desde));
@@ -678,7 +681,7 @@ function modal(html, ctx = null) {
   const f = $('#modal-root .modal input:not([type=hidden]):not([type=checkbox]), #modal-root .modal select');
   if (f && window.matchMedia('(min-width: 900px)').matches) f.focus();
 }
-function closeModal() { $('#modal-root').innerHTML = ''; modalCtx = null; }
+function closeModal() { $('#modal-root').innerHTML = ''; modalCtx = null; openPick = null; }
 function confirmBox(msg, okLabel = 'Aceptar', danger = false) {
   return new Promise((res) => {
     modal(`<h2>Confirmar</h2><div style="line-height:1.5">${msg}</div><div class="modal-foot"><button class="btn" data-cf="0">Cancelar</button><button class="btn ${danger ? 'warn' : 'dark'}" data-cf="1">${okLabel}</button></div>`, { confirm: res });
@@ -690,7 +693,8 @@ function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.ad
 function rutaModal(idx) {
   const day = getDay(ui.date);
   const r = idx == null ? { id: uid(), clientes: [], parrillas: '', camiones: [{ truck: '', chofer: '', ayudantes: [] }] } : clone(day.rutas[idx]);
-  modalCtx = { kind: 'ruta', idx, r, pick: null };
+  modalCtx = { kind: 'ruta', idx, r };
+  openPick = idx == null ? 'rt:0' : null;
   drawRuta();
 }
 function drawRuta() {
@@ -710,11 +714,10 @@ function drawRuta() {
     let chOpts = choferes;
     if (t && t.choferModo === 'varios' && (t.choferes || []).length) chOpts = [...choferes.filter((p) => t.choferes.includes(p.id)), ...choferes.filter((p) => !t.choferes.includes(p.id))];
     return `<div class="truckrow">
-      <div class="field"><span class="flabel">Camión ${r.camiones.length > 1 ? ci + 1 : ''}</span><button type="button" class="tpick-btn ${t ? '' : 'empty'}" data-ract="pick" data-ci="${ci}" aria-expanded="${modalCtx.pick === ci}">${t ? truckCols(t, usedT) : '<span class="muted">Elegir camión…</span>'}<span class="tpick-caret" aria-hidden="true">▾</span></button></div>
-      ${modalCtx.pick === ci ? truckPicker(ci, tr, c.truck, usedT) : ''}
-      <div class="field"><label>Chofer del día</label><select class="sel" data-rchange="chofer" data-ci="${ci}"><option value="">Sin chofer</option>${sortAvail(chOpts, na, c.chofer ? [c.chofer] : []).map((p) => { const u = na.get(p.id), cur = p.id === c.chofer; return `<option value="${p.id}" ${cur ? 'selected' : ''} ${u && !cur ? 'disabled' : ''}>${esc(p.nombre)}${u ? ' — ' + esc(u.label) : ''}</option>`; }).join('')}</select>${c.chofer && na.get(c.chofer) ? `<div class="hint warn">${esc(pname(c.chofer))}: ${esc(na.get(c.chofer).label)}</div>` : ''}</div>
-      <div class="field"><span class="flabel">Ayudantes</span><div class="chips">${sortAvail(ayud, new Map([...na, ...(c.chofer && !na.has(c.chofer) ? [[c.chofer, { kind: 'busy', label: 'es el chofer' }]] : [])]), c.ayudantes || []).map((p) => { const u = na.get(p.id) || (p.id === c.chofer ? { kind: 'busy', label: 'es el chofer' } : null), on = (c.ayudantes || []).includes(p.id); return `<button type="button" class="chip ${on ? 'on' : ''} ${u ? (u.kind === 'abs' ? 'off' : 'busy') : ''}" data-ract="ayu" data-ci="${ci}" data-id="${p.id}" ${u && !on ? 'disabled' : ''} title="${u ? esc(u.label) : 'Disponible'}"><span class="nm">${esc(p.nombre)}</span>${u ? `<small>${esc(u.label)}</small>` : ''}</button>`; }).join('')}</div>
-        <div class="hint">Tachados: ya asignados hoy o con falta, permiso, vacaciones o IGSS.</div></div>
+      <div class="field"><span class="flabel">Camión ${r.camiones.length > 1 ? ci + 1 : ''}</span>${picker('rt:' + ci, { layout: 'truck', label: 'Camión', rows: tr.map((x) => truckRow(x, usedT)), sel: c.truck, placeholder: 'Elegir camión…', none: 'Sin camión' })}</div>
+      <div class="field"><span class="flabel">Chofer del día</span>${picker('rc:' + ci, { layout: 'person', label: 'Chofer del día', rows: sortAvail(chOpts, na, c.chofer ? [c.chofer] : []).map((p) => personRow(p, na.get(p.id))), sel: c.chofer, placeholder: 'Elegir chofer…', none: 'Sin chofer' })}${c.chofer && na.get(c.chofer) ? `<div class="hint warn">${esc(pname(c.chofer))}: ${esc(na.get(c.chofer).label)}</div>` : ''}</div>
+      <div class="field"><span class="flabel">Ayudantes</span>${(() => { const naA = new Map([...na, ...(c.chofer && !na.has(c.chofer) ? [[c.chofer, { kind: 'busy', label: 'es el chofer' }]] : [])]); return picker('ra:' + ci, { layout: 'person', multi: true, label: 'Ayudantes', rows: sortAvail(ayud, naA, c.ayudantes || []).map((p) => personRow(p, naA.get(p.id))), sel: c.ayudantes || [], placeholder: 'Elegir ayudantes…' }); })()}
+        <div class="hint">No disponibles (en gris): ya asignados hoy o con falta, permiso, vacaciones o IGSS.</div></div>
       ${r.camiones.length > 1 ? `<div class="row"><button class="btn sm danger" data-ract="truck-del" data-ci="${ci}">Quitar camión</button></div>` : ''}
     </div>`;
   }).join('');
@@ -726,6 +729,68 @@ function drawRuta() {
     <div class="row"><button class="btn sm" data-ract="truck-add">+ Otro camión</button></div>
     <div class="modal-foot">${idx != null ? '<button class="btn danger left" data-ract="del">Borrar ruta</button>' : ''}<button class="btn" data-close>Cancelar</button><button class="btn dark" data-ract="save">Guardar</button></div>`, modalCtx);
 }
+/* ---------------- Selector en columnas (reemplaza los desplegables) ---------------- */
+let openPick = null;
+const PK = {
+  truck: { cls: 'pk-truck', head: ['Camión / matrícula', 'Chofer asignado', 'Parrillas'] },
+  person: { cls: 'pk-person', head: ['Colaborador', 'Puesto', 'Estado'] },
+  prod: { cls: 'pk-prod', head: ['Código', 'Descripción'] },
+};
+const pkCells = (cols) => cols.map((c, i) => `<span class="pk-c pk-c${i}">${c}</span>`).join('');
+function personCols(p, u) {
+  return [`<b>${esc(p.nombre)}</b>${p.tarjeta ? `<small class="mono">#${esc(p.tarjeta)}</small>` : ''}`, `<span class="small">${esc(puestoOf(p))}</span>`,
+    u ? `<span class="small ${u.kind === 'abs' ? 't-falta' : 'muted'}">${esc(u.label)}</span>` : '<span class="small t-permiso">Disponible</span>'];
+}
+const personRow = (p, u, extra = {}) => Object.assign({ id: p.id, cols: personCols(p, u), name: p.nombre, s: norm([p.nombre, p.tarjeta, p.puesto, roleLabel(p)].join(' ')), dis: !!u }, extra);
+const truckRow = (t, usedT) => ({ id: t.id, cols: truckColsArr(t, usedT), name: t.nombre, s: norm([t.nombre, t.matricula, t.choferModo === 'varios' ? 'varios' : pname(t.chofer), (t.choferes || []).map(pname).join(' '), t.nota].join(' ')) });
+const prodRow = (p) => ({ id: p.id, cols: [`<b>${esc(p.codigo)}</b>`, `<span class="small muted">${esc(p.desc || '')}</span>`], name: p.codigo, s: norm([p.codigo, p.desc].join(' ')) });
+/* key: identifica el selector; o: { layout, rows, sel (id o lista), multi, placeholder, none, compact, label } */
+function picker(key, o) {
+  const L = PK[o.layout], open = openPick === key;
+  const selIds = o.multi ? (o.sel || []) : (o.sel ? [o.sel] : []);
+  const cur = !o.multi && o.rows.find((r) => r.id === o.sel);
+  let inner;
+  if (o.multi) inner = `<span class="pk-sum">${selIds.length ? selIds.map((id) => esc((o.rows.find((r) => r.id === id) || {}).name || pname(id))).join(', ') : `<span class="muted">${esc(o.placeholder || 'Elegir…')}</span>`}</span>`;
+  else if (cur && o.compact) inner = `<span class="pk-sum"><b>${esc(cur.name)}</b></span>`;
+  else if (cur) inner = pkCells(cur.cols);
+  else inner = `<span class="pk-sum muted">${esc(o.placeholder || 'Elegir…')}</span>`;
+  const btn = `<button type="button" class="pk-btn ${L.cls} ${o.multi || o.compact || !cur ? 'sum' : ''} ${open ? 'open' : ''}" data-pk="${key}" aria-expanded="${open}" aria-label="${esc(o.label || 'Elegir')}">${inner}<span class="pk-caret" aria-hidden="true">${open ? '▴' : '▾'}</span></button>`;
+  if (!open) return btn;
+  const rows = o.rows.map((r) => { const on = selIds.includes(r.id), dis = r.dis && !on; return `<button type="button" class="pk-row ${on ? 'on' : ''} ${r.dis ? 'dis' : ''}" data-pkset="${key}" data-id="${r.id}" data-s="${esc(r.s || '')}" ${dis ? 'disabled' : ''}>${o.multi ? `<span class="pk-chk">${on ? '✓' : ''}</span>` : ''}${pkCells(r.cols)}</button>`; }).join('');
+  return btn + `<div class="pk-panel ${L.cls} ${o.multi ? 'multi' : ''}" role="listbox" aria-label="${esc(o.label || '')}" aria-multiselectable="${!!o.multi}">
+    <input class="inp" type="search" placeholder="Buscar…" data-pksearch aria-label="Buscar">
+    <div class="pk-head">${o.multi ? '<span></span>' : ''}${L.head.map((h, i) => `<span class="pk-c pk-c${i}">${h}</span>`).join('')}</div>
+    <div class="pk-list">${rows}${!o.multi && o.none ? `<button type="button" class="pk-row" data-pkset="${key}" data-id="" data-s="${esc(norm(o.none))}"><span class="muted">${esc(o.none)}</span></button>` : ''}</div>
+    ${o.multi ? `<div class="row" style="justify-content:space-between"><span class="small muted">${selIds.length} seleccionado(s)</span><button type="button" class="btn sm dark" data-pk="${key}">Listo</button></div>` : ''}
+  </div>`;
+}
+function redraw() {
+  const k = modalCtx && modalCtx.kind;
+  const fn = { ruta: drawRuta, abs: drawAbs, truck: drawTruck }[k];
+  if (fn) fn(); else render();
+  const ip = document.querySelector('.pk-panel [data-pksearch]');
+  if (ip && window.matchMedia('(min-width: 900px)').matches) ip.focus({ preventScroll: true });
+}
+function onPick(key, id) {
+  const [k, n] = key.split(':'); const i = +n;
+  const toggle = (arr) => (arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id]);
+  if (k === 'rt') { const c = modalCtx.r.camiones[i]; c.truck = id; const t = get('trucks', id); if (t && t.choferModo !== 'varios' && t.chofer) c.chofer = t.chofer; openPick = null; }
+  else if (k === 'rc') { modalCtx.r.camiones[i].chofer = id; openPick = null; }
+  else if (k === 'ra') { const c = modalCtx.r.camiones[i]; c.ayudantes = toggle(c.ayudantes || []); }
+  else if (k === 'ap') { modalCtx.a.personId = id; openPick = null; }
+  else if (k === 'tc') { modalCtx.t.chofer = id; openPick = null; }
+  else if (k === 'tv') { modalCtx.t.choferes = toggle(modalCtx.t.choferes || []); }
+  else if (k === 'qp') { ui.q.person = id; openPick = null; }
+  else {
+    const d = getDay(ui.date);
+    if (k === 'de') d.empaques[i].prod = id;
+    if (k === 'dt') { d.z18.apoyo[i].truck = id; const t = get('trucks', id); if (t && t.choferModo !== 'varios' && t.chofer && !d.z18.apoyo[i].chofer) d.z18.apoyo[i].chofer = t.chofer; }
+    if (k === 'dc') d.z18.apoyo[i].chofer = id;
+    saveDay(d); openPick = null;
+  }
+  redraw();
+}
+
 /* Personas no disponibles para el camión ci de la ruta en edición: ausentes o ya asignadas ese día */
 function unavailable(idx, r, ci) {
   const m = new Map();
@@ -753,18 +818,12 @@ function truckChofer(t) {
   if (t.choferModo === 'varios') return '<span class="tag navy">VARIOS</span>' + ((t.choferes || []).length ? ' <span class="muted small">' + esc(t.choferes.map(pname).join(', ')) + '</span>' : '');
   return t.chofer ? esc(pname(t.chofer)) : '<span class="muted">—</span>';
 }
-function truckCols(t, usedT) {
-  return `<span class="tc-name"><b>${esc(t.nombre)}</b>${t.matricula && !String(t.nombre).includes(t.matricula) ? `<small class="mono">${esc(t.matricula)}</small>` : ''}${usedT && usedT.has(t.id) ? '<small class="t-falta">en otra ruta</small>' : ''}</span><span class="tc-chofer">${truckChofer(t)}</span><span class="tc-parr">${t.capacidad ? '<b>' + esc(t.capacidad) + '</b><small>parr.</small>' : '<span class="muted">—</span>'}</span>`;
+function truckColsArr(t, usedT) {
+  return [`<b>${esc(t.nombre)}</b>${t.matricula && !String(t.nombre).includes(t.matricula) ? `<small class="mono">${esc(t.matricula)}</small>` : ''}${usedT && usedT.has(t.id) ? '<small class="t-falta">en otra ruta</small>' : ''}`,
+    `<span class="small">${truckChofer(t)}</span>`,
+    t.capacidad ? '<b>' + esc(t.capacidad) + '</b><small>parr.</small>' : '<span class="muted">—</span>'];
 }
-function truckPicker(ci, tr, current, usedT) {
-  return `<div class="tpick" role="listbox" aria-label="Camiones">
-    <input class="inp" type="search" placeholder="Buscar camión, matrícula o chofer…" data-tpick aria-label="Buscar camión">
-    <div class="tpick-head"><span>Camión / matrícula</span><span>Chofer asignado</span><span style="text-align:right">Parrillas</span></div>
-    <div class="tpick-list">
-      ${tr.map((t) => `<button type="button" class="tpick-row ${t.id === current ? 'on' : ''}" data-ract="pickset" data-ci="${ci}" data-id="${t.id}" data-s="${esc(norm([t.nombre, t.matricula, t.choferModo === 'varios' ? 'varios' : pname(t.chofer), (t.choferes || []).map(pname).join(' ')].join(' ')))}">${truckCols(t, usedT)}</button>`).join('')}
-      <button type="button" class="tpick-row" data-ract="pickset" data-ci="${ci}" data-id="" data-s="sin camion"><span class="muted">Sin camión</span></button>
-    </div></div>`;
-}
+function truckCols(t, usedT) { const c = truckColsArr(t, usedT); return `<span class="tc-name">${c[0]}</span><span class="tc-chofer">${c[1]}</span><span class="tc-parr">${c[2]}</span>`; }
 function assignedElsewhere(idx) {
   const day = getDay(ui.date); const s = new Set();
   day.rutas.forEach((r, i) => { if (i === idx) return; r.camiones.forEach((c) => { if (c.chofer) s.add(c.chofer); (c.ayudantes || []).forEach((a) => s.add(a)); }); });
@@ -776,14 +835,8 @@ function rutaAction(act, el) {
   if (act === 'cli') { const id = el.dataset.id; r.clientes = r.clientes.includes(id) ? r.clientes.filter((x) => x !== id) : [...r.clientes, id]; }
   else if (act === 'cli-new') { const n = prompt('Nombre del nuevo cliente'); if (n && n.trim()) { const c = { id: uid(), nombre: n.trim().toUpperCase(), usaParrillas: false, activo: true }; put('clients', c); r.clientes.push(c.id); } }
   else if (act === 'ayu') { const id = el.dataset.id, c = r.camiones[ci]; c.ayudantes = (c.ayudantes || []).includes(id) ? c.ayudantes.filter((x) => x !== id) : [...(c.ayudantes || []), id]; }
-  else if (act === 'pick') modalCtx.pick = modalCtx.pick === ci ? null : ci;
-  else if (act === 'pickset') {
-    const c = r.camiones[ci]; c.truck = el.dataset.id; modalCtx.pick = null;
-    const t = get('trucks', c.truck);
-    if (t && t.choferModo !== 'varios' && t.chofer) c.chofer = t.chofer;
-  }
-  else if (act === 'truck-add') { r.camiones.push({ truck: '', chofer: '', ayudantes: [] }); modalCtx.pick = r.camiones.length - 1; }
-  else if (act === 'truck-del') r.camiones.splice(ci, 1);
+  else if (act === 'truck-add') { r.camiones.push({ truck: '', chofer: '', ayudantes: [] }); openPick = 'rt:' + (r.camiones.length - 1); }
+  else if (act === 'truck-del') { r.camiones.splice(ci, 1); openPick = null; }
   else if (act === 'save') {
     if (!r.clientes.length) return toast('Elige al menos un cliente');
     const day = getDay(ui.date);
@@ -813,6 +866,7 @@ function absModal(id, tipo) {
   const a = id ? clone(get('absences', id)) : { id: uid(), personId: '', tipo: tipo || 'falta', desde: ui.view === 'dia' ? ui.date : todayISO(), hasta: '', motivo: '', estado: 'solicitada' };
   if (!a.hasta) a.hasta = a.tipo === 'vacaciones' ? addDays(a.desde, 14) : a.desde;
   modalCtx = { kind: 'abs', a, isNew: !id };
+  openPick = id ? null : 'ap';
   drawAbs();
 }
 function drawAbs() {
@@ -820,7 +874,7 @@ function drawAbs() {
   const dias = diffDays(a.desde, a.hasta) + 1;
   modal(`<h2>${isNew ? 'Registrar ausencia' : 'Editar ausencia'}</h2>
     <div class="field"><span class="flabel">Tipo</span><div class="chips">${Object.entries(TIPOS).map(([k, t]) => `<button type="button" class="chip ${a.tipo === k ? 'on' : ''}" data-aact="tipo" data-k="${k}"><span class="dot bg-${k}"></span>${t.label}</button>`).join('')}</div></div>
-    <div class="field"><label for="a-p">Colaborador</label><select id="a-p" class="sel" data-achange="personId"><option value="">Elige…</option>${people().map((p) => `<option value="${p.id}" ${p.id === a.personId ? 'selected' : ''}>${esc(p.nombre)}${esc(tarjeta(p))} · ${esc(roleLabel(p))}</option>`).join('')}</select></div>
+    <div class="field"><span class="flabel">Colaborador</span>${picker('ap', { layout: 'person', label: 'Colaborador', rows: people().filter((p) => p.activo !== false || p.id === a.personId).map((p) => { const ex = absencesOn(a.desde).find((x) => x.personId === p.id && x.id !== a.id); return personRow(p, ex ? { kind: 'abs', label: TIPOS[ex.tipo].label } : null, { dis: false }); }), sel: a.personId, placeholder: 'Elegir colaborador…' })}</div>
     <div class="grid2"><div class="field"><label for="a-d">Desde</label><input id="a-d" class="inp" type="date" value="${a.desde}" data-achange="desde"></div>
     <div class="field"><label for="a-h">Hasta</label><input id="a-h" class="inp" type="date" value="${a.hasta}" data-achange="hasta"></div></div>
     <div class="hint">${dias} día(s) calendario${a.tipo === 'vacaciones' ? ' · normalmente 15' : ''}</div>
@@ -1050,8 +1104,8 @@ function drawTruck() {
     <div class="field"><span class="flabel">En agenda</span><div class="seg"><button type="button" class="btn ${t.activo !== false ? 'navy' : ''}" data-tact="act" data-k="1">Visible al asignar</button><button type="button" class="btn ${t.activo === false ? 'navy' : ''}" data-tact="act" data-k="">Oculto</button></div></div>
     <div class="field"><span class="flabel">Uso</span><div class="chips">${[['rutas', 'Rutas'], ['z18', 'Z18 (viajes fijos)'], ['apoyo', 'Apoyo']].map(([k, l]) => `<button type="button" class="chip ${(t.uso || []).includes(k) ? 'on' : ''}" data-tact="uso" data-k="${k}">${l}</button>`).join('')}</div></div>
     <div class="field"><span class="flabel">Chofer asignado</span><div class="seg"><button type="button" class="btn ${t.choferModo !== 'varios' ? 'navy' : ''}" data-tact="modo" data-k="fijo">Chofer fijo</button><button type="button" class="btn ${t.choferModo === 'varios' ? 'navy' : ''}" data-tact="modo" data-k="varios">Varios</button></div></div>
-    ${t.choferModo === 'varios' ? `<div class="chips">${ch.map((p) => `<button type="button" class="chip ${(t.choferes || []).includes(p.id) ? 'on' : ''}" data-tact="ch" data-id="${p.id}">${esc(p.nombre)}</button>`).join('')}</div><div class="hint">Al usar este camión eliges el chofer del día; los marcados aparecen primero.</div>`
-      : `<select class="sel" data-tchange="chofer" aria-label="Chofer fijo"><option value="">Sin chofer fijo</option>${ch.map((p) => `<option value="${p.id}" ${p.id === t.chofer ? 'selected' : ''}>${esc(p.nombre)}</option>`).join('')}</select>`}
+    ${t.choferModo === 'varios' ? picker('tv', { layout: 'person', multi: true, label: 'Choferes posibles', rows: sortAvail(ch, new Map(), t.choferes || []).map((p) => personRow(p, null)), sel: t.choferes || [], placeholder: 'Elegir choferes posibles…' }) + '<div class="hint">Al usar este camión eliges el chofer del día; los marcados aparecen primero.</div>'
+      : picker('tc', { layout: 'person', label: 'Chofer fijo', rows: ch.map((p) => personRow(p, null)), sel: t.chofer, placeholder: 'Elegir chofer fijo…', none: 'Sin chofer fijo' })}
     <div class="modal-foot">${!isNew ? '<button class="btn danger left" data-tact="del">Borrar</button>' : ''}<button class="btn" data-close>Cancelar</button><button class="btn dark" data-tact="save">Guardar</button></div>`, modalCtx);
 }
 function truckAction(act, el) {
@@ -1145,9 +1199,11 @@ async function applyTemplate() {
 
 /* ---------------- Eventos ---------------- */
 document.addEventListener('click', async (ev) => {
-  const el = ev.target.closest('[data-nav],[data-act],[data-close],[data-cf],[data-ract],[data-aact],[data-tact],[data-sact],[data-wact],[data-mact],[data-bg]');
+  const el = ev.target.closest('[data-pk],[data-pkset],[data-nav],[data-act],[data-close],[data-cf],[data-ract],[data-aact],[data-tact],[data-sact],[data-wact],[data-mact],[data-bg]');
   if (!el) return;
   if (el.tagName === 'A' && el.getAttribute('href') === '#') ev.preventDefault();
+  if (el.dataset.pk != null) { openPick = openPick === el.dataset.pk ? null : el.dataset.pk; return redraw(); }
+  if (el.dataset.pkset != null) return onPick(el.dataset.pkset, el.dataset.id);
   if (el.hasAttribute('data-bg')) { if (ev.target === el) { if (modalCtx && modalCtx.confirm) { modalCtx.confirm(false); } closeModal(); } return; }
   if (el.dataset.cf != null) { const cb = modalCtx && modalCtx.confirm; closeModal(); cb && cb(el.dataset.cf === '1'); return; }
   if (el.dataset.ract) return rutaAction(el.dataset.ract, el);
@@ -1245,6 +1301,7 @@ document.addEventListener('change', (ev) => {
   }
 });
 document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape' && openPick) { openPick = null; redraw(); return; }
   if (ev.key === 'Escape' && $('#modal-root').innerHTML) { if (modalCtx && modalCtx.confirm) modalCtx.confirm(false); closeModal(); }
   if (ev.key === 'Enter' && ev.target.dataset && ev.target.dataset.change === 'q-text') { ui.q.text = ev.target.value; render(); }
 });

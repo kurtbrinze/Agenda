@@ -2,6 +2,14 @@
 
 La versión visible en la app está en `js/app.js` (`VERSION` y `CHANGELOG`). Cada actualización sube la versión.
 
+## V.14 — 2026-11-26
+- Todas las selecciones de colaboradores, camiones y productos se hacen en tablas con columnas y buscador:
+  - Colaborador (nombre y tarjeta) · Puesto · Estado (Disponible, en otra ruta, Vacaciones…)
+  - Camión (y matrícula) · Chofer asignado · Parrillas
+  - Código · Descripción
+- Aplica en rutas (camión, chofer del día, ayudantes con selección múltiple), apoyo Z18, empaques, ausencias, camiones (chofer fijo o varios) y Consultas por colaborador.
+- Las listas de una sola columna (año, mes, cliente) se mantienen como lista normal.
+
 ## V.13 — 2026-11-25
 - Reuniones en el día: presenciales (lugar) o virtuales (plataforma, enlace, ID y código de acceso). Botón “Unirse”, copiar datos y “Agregar a mi calendario” (.ics con aviso 15 min antes).
 - “Pegar invitación”: lee el texto de Teams, Zoom, Meet o Webex y llena enlace, ID y código.
