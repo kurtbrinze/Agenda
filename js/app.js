@@ -2,8 +2,9 @@
 (function () {
 'use strict';
 
-const VERSION = 'V.14';
+const VERSION = 'V.15';
 const CHANGELOG = [
+  ['V.15', '2026-11-26', 'Centro de Control: al volver a la Agenda dentro del centro trae lo último de la nube; si ahí la sincronización está apagada, aviso para activarla. Además le manda al centro el resumen de hoy y del próximo día con actividad (rutas, empaques, personal, ausencias, reuniones y notas) para su tarjeta del inicio.'],
   ['V.14', '2026-11-26', 'Selección de colaboradores, camiones y productos en tablas con columnas y buscador (rutas, ayudantes, apoyo Z18, ausencias, camiones, empaques y consultas).'],
   ['V.13', '2026-11-25', 'Reuniones presenciales o virtuales: hora, lugar o enlace, ID y código de acceso; lectura automática de la invitación, botón Unirse, copiar datos, agregar al calendario (.ics) y consulta de reuniones.'],
   ['V.12', '2026-11-25', 'Tabla de camiones en Parámetros ordenada de mayor a menor capacidad de parrillas.'],
@@ -304,6 +305,56 @@ function render() {
   applyFilters();
   if (ui.view === 'dia') document.title = 'Agenda · ' + DIAS[dow(ui.date)] + ' ' + fmtShort(ui.date);
   else document.title = 'Agenda';
+  resumenCentro();
+}
+
+/* ---------------- Centro de Control: resumen para su tarjeta ----------------
+   Hoy y el próximo día con actividad: rutas (clientes, camión, chofer y
+   ayudantes), empaques, personal asignado, ausencias, reuniones y notas.
+   La Agenda no comparte sitio con el centro, así que va por postMessage y
+   únicamente a la dirección del centro. Se manda cuando algo cambió o cuando
+   el centro lo pide. */
+const CENTRO = ['https://centrocontrolpana.vercel.app'];
+let resumenPrevio = '';
+function resumenDia(iso) {
+  const d = get('days', iso), hol = holidayOf(iso);
+  const gente = new Set();
+  const rutas = d ? d.rutas.map((r) => ({
+    clientes: (r.clientes || []).map(cname).join(' + '),
+    parrillas: r.parrillas || '',
+    camiones: (r.camiones || []).map((c) => {
+      if (c.chofer) gente.add(c.chofer);
+      (c.ayudantes || []).forEach((a) => gente.add(a));
+      return { camion: tname(c.truck), chofer: c.chofer ? pname(c.chofer) : '', ayudantes: (c.ayudantes || []).map(pname) };
+    }),
+  })) : [];
+  if (d) (d.z18.apoyo || []).forEach((a) => { if (a.chofer) gente.add(a.chofer); (a.ayudantes || []).forEach((p) => gente.add(p)); });
+  return {
+    fecha: iso, feriado: hol ? hol.nombre : '', sinDespacho: isOff(iso),
+    rutas,
+    empaques: d ? d.empaques.map((e) => ({ prod: prodName(e.prod), cant: e.cant })) : [],
+    personal: gente.size,
+    ausencias: absencesOn(iso).filter((a) => a.tipo !== 'vacaciones' || a.estado !== 'solicitada')
+      .map((a) => ({ nombre: pname(a.personId), tipo: (TIPOS[a.tipo] || {}).label || a.tipo })),
+    reuniones: meetingsOn(iso).map((m) => ({ hora: m.hora || '', titulo: m.titulo || '' })),
+    notas: d ? d.notas.map((n) => n.texto) : [],
+  };
+}
+function resumenCentro(forzar) {
+  try {
+    if (!EMBEBIDA) return;
+    const hoy = todayISO();
+    let prox = addDays(hoy, 1);
+    for (let i = 0; i < 14 && !dayHasContent(get('days', prox)); i++) prox = addDays(prox, 1);
+    if (!dayHasContent(get('days', prox))) prox = addDays(hoy, 1);
+    const datos = { dias: [resumenDia(hoy), resumenDia(prox)] };
+    const firma = JSON.stringify(datos);
+    if (!forzar && firma === resumenPrevio) return;
+    resumenPrevio = firma;
+    const msg = { tipo: 'cc:insight', id: 'agenda', insight: { v: 1, app: 'agenda', actualizado: new Date().toISOString(), datos } };
+    const local = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+    (local ? ['*'] : CENTRO).forEach((o) => window.parent.postMessage(msg, o));
+  } catch (_) { /* el resumen nunca debe romper la Agenda */ }
 }
 
 function applyFilters() {
@@ -1366,7 +1417,43 @@ function updateSyncUI() {
   }
   document.querySelectorAll('[data-syncdot]').forEach((d) => (d.className = 'dot ' + cls));
   document.querySelectorAll('[data-synctext]').forEach((d) => (d.textContent = txt));
+  avisoCentro();
 }
+
+/* ---------------- Centro de Control ----------------
+   Dentro del Centro de Control la Agenda corre en un marco, y el navegador le
+   da un almacenamiento aparte: no ve la clave ni los datos de la Agenda
+   abierta sola. Sin clave, lo que se escriba ahí se quedaría solo en ese
+   marco. Por eso, dentro del centro y sin clave, se muestra un aviso fijo. */
+const EMBEBIDA = (() => { try { return window.self !== window.top; } catch (_) { return true; } })();
+function avisoCentro() {
+  let b = document.getElementById('aviso-centro');
+  const falta = EMBEBIDA && !localStorage.getItem(LS_KEY);
+  if (!falta) { if (b) b.remove(); return; }
+  if (b) return;
+  b = document.createElement('div');
+  b.id = 'aviso-centro';
+  b.setAttribute('role', 'alert');
+  b.style.cssText = 'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:9999;display:flex;align-items:center;gap:12px;max-width:calc(100% - 24px);padding:10px 12px 10px 16px;border-radius:12px;background:#3a2a06;border:1px solid #f5b301;color:#ffe9a8;font-size:13px;line-height:1.4;box-shadow:0 6px 24px rgba(0,0,0,.35)';
+  b.innerHTML = '<span>Sincronización apagada dentro del Centro de Control. Lo que guardes aquí no llegará a tus otros equipos.</span>';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.textContent = 'Activar';
+  btn.style.cssText = 'flex:none;padding:7px 14px;border-radius:8px;border:0;background:#f5b301;color:#2a1d00;font-weight:600;cursor:pointer';
+  btn.onclick = () => { go('ajustes'); setTimeout(() => { const i = document.getElementById('sync-key'); if (i) i.focus(); }, 50); };
+  b.appendChild(btn);
+  document.body.appendChild(b);
+}
+/* El centro avisa cada vez que vuelve a mostrar la Agenda (cc:mostrar): es el
+   momento de traer lo que otro equipo dejó; dentro del centro no hay
+   visibilitychange al cambiar de app porque el marco sigue abierto. También
+   puede pedir el resumen de su tarjeta (cc:resumen). */
+window.addEventListener('message', (ev) => {
+  if (!ev.data) return;
+  if (ev.data.tipo === 'cc:resumen') { resumenCentro(true); return; }
+  if (ev.data.tipo !== 'cc:mostrar') return;
+  if (localStorage.getItem(LS_KEY)) syncNow(); else avisoCentro();
+});
 window.addEventListener('online', () => { syncErr = false; syncNow(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncNow(); });
 
