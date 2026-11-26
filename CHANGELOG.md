@@ -2,6 +2,9 @@
 
 La versión visible en la app está en `js/app.js` (`VERSION` y `CHANGELOG`). Cada actualización sube la versión.
 
+## V.16 — 2026-11-26
+- Nuevo tipo de ausencia **Cita IGSS** (verde) separado de **Suspensión IGSS** (azul): botón “+ Cita IGSS” en el día, color en calendario y leyenda, plantilla de WhatsApp propia y aviso para enviarla al registrarla. Bloquea al colaborador para rutas ese día, como las demás ausencias.
+
 ## V.15 — 2026-11-26
 - Centro de Control: al volver a la Agenda dentro del centro trae lo último de la nube; si ahí la sincronización está apagada, aviso fijo con «Activar» (el navegador guarda los datos del marco aparte).
 - Le manda al centro el resumen de hoy y del próximo día con actividad (rutas, empaques, personal, ausencias, reuniones y notas) para su tarjeta del inicio. Sólo a la dirección del centro.

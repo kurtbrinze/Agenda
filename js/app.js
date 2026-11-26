@@ -2,8 +2,9 @@
 (function () {
 'use strict';
 
-const VERSION = 'V.15';
+const VERSION = 'V.16';
 const CHANGELOG = [
+  ['V.16', '2026-11-26', 'Nuevo tipo de ausencia “Cita IGSS” en verde, separado de “Suspensión IGSS” (azul); con su botón, leyenda, plantilla de WhatsApp y aviso al registrarla.'],
   ['V.15', '2026-11-26', 'Centro de Control: al volver a la Agenda dentro del centro trae lo último de la nube; si ahí la sincronización está apagada, aviso para activarla. Además le manda al centro el resumen de hoy y del próximo día con actividad (rutas, empaques, personal, ausencias, reuniones y notas) para su tarjeta del inicio.'],
   ['V.14', '2026-11-26', 'Selección de colaboradores, camiones y productos en tablas con columnas y buscador (rutas, ayudantes, apoyo Z18, ausencias, camiones, empaques y consultas).'],
   ['V.13', '2026-11-25', 'Reuniones presenciales o virtuales: hora, lugar o enlace, ID y código de acceso; lectura automática de la invitación, botón Unirse, copiar datos, agregar al calendario (.ics) y consulta de reuniones.'],
@@ -40,6 +41,7 @@ const TIPOS = {
   permiso: { label: 'Permiso', cls: 'permiso' },
   vacaciones: { label: 'Vacaciones', cls: 'vacaciones' },
   igss: { label: 'Suspensión IGSS', cls: 'igss' },
+  cita: { label: 'Cita IGSS', cls: 'cita' },
 };
 const ROLES = { chofer: 'Chofer', ayudante: 'Ayudante', ambos: 'Chofer y ayudante', otro: 'Otro' };
 const PUESTOS = ['Empacador', 'Empacadora', 'Verificador', 'Verificadora', 'Bodeguero', 'Auxiliar', 'Supervisor'];
@@ -479,7 +481,8 @@ function viewDay() {
           <button class="btn sm b-falta" data-act="abs-new" data-tipo="falta">+ Falta</button>
           <button class="btn sm b-permiso" data-act="abs-new" data-tipo="permiso">+ Permiso</button>
           <button class="btn sm" data-act="abs-new" data-tipo="vacaciones">+ Vacaciones</button>
-          <button class="btn sm b-igss" data-act="abs-new" data-tipo="igss">+ IGSS</button>
+          <button class="btn sm b-igss" data-act="abs-new" data-tipo="igss">+ Suspensión IGSS</button>
+          <button class="btn sm b-cita" data-act="abs-new" data-tipo="cita">+ Cita IGSS</button>
         </div></section>
       <section class="sec"><div class="sec-h"><h2>Día</h2></div>
         <div class="row">
@@ -554,7 +557,7 @@ function viewAbsences() {
       <div><div class="dtitle">Calendario de ausencias</div><div class="dsub">${fmtShort(start)} – ${fmtLong(end)}</div></div>
       <button class="btn icon" data-act="tl-next" aria-label="Siguiente">${ic('right')}</button></div>
       <div class="row acts"><button class="btn" data-act="tl-today">Hoy</button><button class="btn dark" data-act="abs-new" data-tipo="vacaciones">+ Solicitud de vacaciones</button><button class="btn" data-act="abs-new" data-tipo="falta">+ Otra ausencia</button></div></div>
-    <div class="legend"><span><i class="bg-vacaciones"></i>Vacaciones confirmadas</span><span><i style="border:2px dashed #2B2A26"></i>Vacaciones solicitadas (aprox.)</span><span><i class="bg-permiso"></i>Permiso</span><span><i class="bg-falta"></i>Falta</span><span><i class="bg-igss"></i>Suspensión IGSS</span><span><i style="background:#E3D7BE"></i>Domingo</span><span><i style="background:#EAD9C0"></i>Feriado</span></div>
+    <div class="legend"><span><i class="bg-vacaciones"></i>Vacaciones confirmadas</span><span><i style="border:2px dashed #2B2A26"></i>Vacaciones solicitadas (aprox.)</span><span><i class="bg-permiso"></i>Permiso</span><span><i class="bg-falta"></i>Falta</span><span><i class="bg-igss"></i>Suspensión IGSS</span><span><i class="bg-cita"></i>Cita IGSS</span><span><i style="background:#E3D7BE"></i>Domingo</span><span><i style="background:#EAD9C0"></i>Feriado</span></div>
     <div class="tl-wrap">${head}${rows || '<div class="empty" style="padding:16px">Sin ausencias en este período.</div>'}</div>
     <div class="panel" style="margin-top:16px"><h2 style="font-size:16px">Vacaciones pendientes de confirmar por RRHH</h2>
       ${pend.length ? pend.map((a) => `<div class="row"><span><b>${esc(pname(a.personId))}</b> · ${fmtRange(a.desde, a.hasta)}</span><span class="spacer"></span><button class="btn sm" data-act="abs-edit" data-id="${a.id}">Confirmar fechas</button></div>`).join('') : '<div class="empty">Ninguna.</div>'}</div>`;
@@ -930,7 +933,7 @@ function drawAbs() {
     <div class="field"><label for="a-h">Hasta</label><input id="a-h" class="inp" type="date" value="${a.hasta}" data-achange="hasta"></div></div>
     <div class="hint">${dias} día(s) calendario${a.tipo === 'vacaciones' ? ' · normalmente 15' : ''}</div>
     ${a.tipo === 'vacaciones' ? `<div class="field"><span class="flabel">Estado</span><div class="seg"><button type="button" class="btn ${a.estado === 'solicitada' ? 'navy' : ''}" data-aact="estado" data-k="solicitada">Solicitadas (aprox.)</button><button type="button" class="btn ${a.estado === 'confirmada' ? 'navy' : ''}" data-aact="estado" data-k="confirmada">Confirmadas por RRHH</button></div></div>` : ''}
-    <div class="field"><label for="a-m">${a.tipo === 'falta' ? 'Motivo (vacío si no se reportó)' : a.tipo === 'igss' ? 'Detalle (opcional)' : 'Motivo'}</label><input id="a-m" class="inp" value="${esc(a.motivo)}" data-achange="motivo"></div>
+    <div class="field"><label for="a-m">${a.tipo === 'falta' ? 'Motivo (vacío si no se reportó)' : a.tipo === 'cita' ? 'Detalle (hora, clínica…)' : a.tipo === 'igss' ? 'Detalle (opcional)' : 'Motivo'}</label><input id="a-m" class="inp" value="${esc(a.motivo)}" data-achange="motivo"></div>
     ${!isNew ? `<div class="row"><button type="button" class="btn sm wa" data-act="wa" data-id="${a.id}">${ic('wa')}Enviar por WhatsApp</button>${a.comunicado ? '<span class="small t-permiso">Enviado ' + new Date(a.comunicado).toLocaleDateString('es-GT') + '</span>' : ''}</div>` : ''}
     <div class="modal-foot">${!isNew ? '<button class="btn danger left" data-aact="del">Borrar</button>' : ''}<button class="btn" data-close>Cancelar</button><button class="btn dark" data-aact="save">Guardar</button></div>`, modalCtx);
 }
@@ -1057,12 +1060,13 @@ function waTitle(a) {
   if (a.tipo === 'permiso') return 'Permiso autorizado';
   if (a.tipo === 'vacaciones') return a.estado === 'solicitada' ? 'Solicitud de vacaciones' : 'Vacaciones autorizadas';
   if (a.tipo === 'igss') return 'Suspensión IGSS';
+  if (a.tipo === 'cita') return 'Cita IGSS';
   return 'Falta registrada';
 }
 /* Plantillas de WhatsApp: se guardan en "templates" con id wa-<clave> para sincronizarse */
 const WA_KINDS = [
   ['permiso', 'Permiso autorizado'], ['vacaciones', 'Vacaciones autorizadas'], ['solicitud', 'Solicitud de vacaciones'],
-  ['falta', 'Falta'], ['igss', 'Suspensión IGSS'],
+  ['falta', 'Falta'], ['igss', 'Suspensión IGSS'], ['cita', 'Cita IGSS'],
 ];
 const WA_DEFAULT = {
   permiso: '*Permiso autorizado*\nColaborador: {nombre}\nTarjeta: {tarjeta}\nPuesto: {puesto}\n{fechas}\nMotivo: {motivo}',
@@ -1070,6 +1074,7 @@ const WA_DEFAULT = {
   solicitud: '*Solicitud de vacaciones*\nColaborador: {nombre}\nTarjeta: {tarjeta}\nPuesto: {puesto}\n{fechas}\nFechas aproximadas, pendientes de confirmar por RRHH',
   falta: '*Falta registrada*\nColaborador: {nombre}\nTarjeta: {tarjeta}\nPuesto: {puesto}\n{fechas}\nMotivo: {motivo}',
   igss: '*Suspensión IGSS*\nColaborador: {nombre}\nTarjeta: {tarjeta}\nPuesto: {puesto}\n{fechas}\nDetalle: {motivo}',
+  cita: '*Cita IGSS*\nColaborador: {nombre}\nTarjeta: {tarjeta}\nPuesto: {puesto}\n{fechas}\nDetalle: {motivo}',
 };
 const WA_VARS = [
   ['nombre', 'Nombre'], ['tarjeta', 'Tarjeta'], ['puesto', 'Puesto'], ['area', 'Área'], ['fechas', 'Fechas (frase completa)'],
@@ -1105,7 +1110,7 @@ function waSampleVars(kind) {
   return Object.assign(waVars(a), { nombre: 'María López', tarjeta: '10452', puesto: 'Verificadora', area: 'Despacho' });
 }
 function shouldNotify(a, before) {
-  if (a.tipo === 'permiso') return !before || before.tipo !== 'permiso' || !a.comunicado;
+  if (a.tipo === 'permiso' || a.tipo === 'cita') return !before || before.tipo !== a.tipo || !a.comunicado;
   if (a.tipo === 'vacaciones' && a.estado === 'confirmada') return !before || before.estado !== 'confirmada' || before.tipo !== 'vacaciones';
   return false;
 }

@@ -1,4 +1,5 @@
 :root{
+  --cita:#138A4E;
   --bg:#EFE6D2; --bar:#E6DBC2; --line:#D6C8A8; --paper:#FAF4E6; --card:#FFFBF2; --cardline:#E3D6B9;
   --btn:#F7F0E1; --btnline:#CDBE9C; --ink:#2B2A26; --muted:#6B5D43; --brown:#5B4A2E; --dark:#3B3428;
   --navy:#1B2A4A; --cream:#F3EAD6;
@@ -109,6 +110,7 @@ textarea.inp{height:auto;min-height:70px;padding:8px 10px;resize:vertical;line-h
 
 .abs{display:flex;gap:10px;align-items:center;font-size:14px;cursor:pointer;background:none;border:0;padding:4px 0;text-align:left;width:100%}
 .abs .dot{width:10px;height:10px;flex-shrink:0}
+.t-cita{color:var(--cita)} .bg-cita{background:var(--cita)}
 .t-falta{color:var(--red)} .t-permiso{color:var(--green)} .t-vacaciones{color:var(--black)} .t-igss{color:var(--blue)}
 .bg-falta{background:var(--red)} .bg-permiso{background:var(--green)} .bg-vacaciones{background:var(--black)} .bg-igss{background:var(--blue)}
 .abs-btns{display:flex;gap:6px;flex-wrap:wrap}
@@ -116,6 +118,7 @@ textarea.inp{height:auto;min-height:70px;padding:8px 10px;resize:vertical;line-h
 .abs-btns .b-falta{color:var(--red);border-color:#E0B8B4}
 .abs-btns .b-permiso{color:var(--green);border-color:#B9D0BD}
 .abs-btns .b-igss{color:var(--blue);border-color:#B6C6E2}
+.abs-btns .b-cita{color:var(--cita);border-color:#A8DDBE}
 
 .nota{position:relative;font-size:14px;line-height:1.5;white-space:pre-wrap;padding-right:40px}
 .nota .icon-btn{position:absolute;top:4px;right:4px}
