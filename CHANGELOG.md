@@ -2,6 +2,11 @@
 
 La versión visible en la app está en `js/app.js` (`VERSION` y `CHANGELOG`). Cada actualización sube la versión.
 
+## V.17 — 2026-11-26
+- Parámetros → **Motivos de ausencia**: nombre, color (paleta o color libre), días por defecto, si abre el aviso de WhatsApp al registrarlo, si bloquea asignar rutas, y activo/oculto. Se pueden crear motivos nuevos; los 5 de fábrica no se borran.
+- Los colores ya no están fijos en el código: botones, calendario, leyenda, listas y PDF usan los configurados. Cada motivo nuevo tiene su plantilla de WhatsApp.
+- La sincronización incluye los motivos (`api/sync.js`).
+
 ## V.16 — 2026-11-26
 - Nuevo tipo de ausencia **Cita IGSS** (verde) separado de **Suspensión IGSS** (azul): botón “+ Cita IGSS” en el día, color en calendario y leyenda, plantilla de WhatsApp propia y aviso para enviarla al registrarla. Bloquea al colaborador para rutas ese día, como las demás ausencias.
 

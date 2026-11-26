@@ -2,8 +2,9 @@
 (function () {
 'use strict';
 
-const VERSION = 'V.16';
+const VERSION = 'V.17';
 const CHANGELOG = [
+  ['V.17', '2026-11-26', 'Motivos de ausencia configurables en Parámetros: nombre, color, días por defecto, aviso por WhatsApp y si bloquea rutas. Se pueden agregar motivos nuevos.'],
   ['V.16', '2026-11-26', 'Nuevo tipo de ausencia “Cita IGSS” en verde, separado de “Suspensión IGSS” (azul); con su botón, leyenda, plantilla de WhatsApp y aviso al registrarla.'],
   ['V.15', '2026-11-26', 'Centro de Control: al volver a la Agenda dentro del centro trae lo último de la nube; si ahí la sincronización está apagada, aviso para activarla. Además le manda al centro el resumen de hoy y del próximo día con actividad (rutas, empaques, personal, ausencias, reuniones y notas) para su tarjeta del inicio.'],
   ['V.14', '2026-11-26', 'Selección de colaboradores, camiones y productos en tablas con columnas y buscador (rutas, ayudantes, apoyo Z18, ausencias, camiones, empaques y consultas).'],
@@ -25,7 +26,7 @@ const LS_STATE = 'agenda.state.v1';
 const LS_KEY = 'agenda.syncKey';
 const LS_PENDING = 'agenda.pending';
 const LS_LASTSYNC = 'agenda.lastSync';
-const COLS = ['people', 'trucks', 'clients', 'products', 'holidays', 'absences', 'days', 'templates', 'meetings'];
+const COLS = ['people', 'trucks', 'clients', 'products', 'holidays', 'absences', 'days', 'templates', 'meetings', 'abstypes'];
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -36,13 +37,44 @@ const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', '
 const DIAS_C = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const MES_C = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-const TIPOS = {
-  falta: { label: 'Falta', cls: 'falta' },
-  permiso: { label: 'Permiso', cls: 'permiso' },
-  vacaciones: { label: 'Vacaciones', cls: 'vacaciones' },
-  igss: { label: 'Suspensión IGSS', cls: 'igss' },
-  cita: { label: 'Cita IGSS', cls: 'cita' },
-};
+/* Motivos de ausencia: se configuran en Parámetros (colección "abstypes").
+   Los 5 de fábrica conservan su id para no romper el historial. */
+const DEFAULT_TIPOS = [
+  { id: 'falta', nombre: 'Falta', color: '#B3261E', dias: 1, aviso: false, bloquea: true, orden: 0 },
+  { id: 'permiso', nombre: 'Permiso', color: '#2E6B3A', dias: 1, aviso: true, bloquea: true, orden: 1 },
+  { id: 'vacaciones', nombre: 'Vacaciones', color: '#2B2A26', dias: 15, aviso: false, bloquea: true, orden: 2 },
+  { id: 'igss', nombre: 'Suspensión IGSS', color: '#1F4E9A', dias: 1, aviso: false, bloquea: true, orden: 3 },
+  { id: 'cita', nombre: 'Cita IGSS', color: '#138A4E', dias: 1, aviso: true, bloquea: true, orden: 4 },
+];
+const SYS_TIPOS = new Set(DEFAULT_TIPOS.map((t) => t.id));
+const TIPOS_BASE = {};
+const TIPOS = new Proxy(TIPOS_BASE, {
+  get(o, k) { if (k in o) return o[k]; if (typeof k === 'string') return { label: k, color: '#6B5D43', dias: 1, aviso: false, bloquea: true, activo: false }; return undefined; },
+});
+function tipoRecs() {
+  const sys = DEFAULT_TIPOS.map((d) => Object.assign({}, d, get('abstypes', d.id) || {}));
+  const extra = all('abstypes').filter((t) => !SYS_TIPOS.has(t.id));
+  return [...sys, ...extra].sort((a, b) => (a.orden ?? 99) - (b.orden ?? 99));
+}
+function textOn(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || ''); if (!m) return '#FFFFFF';
+  const n = parseInt(m[1], 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return 0.299 * r + 0.587 * g + 0.114 * b > 160 ? '#2B2A26' : '#FFFFFF';
+}
+function rebuildTipos() {
+  Object.keys(TIPOS_BASE).forEach((k) => delete TIPOS_BASE[k]);
+  let css = '';
+  tipoRecs().forEach((t) => {
+    TIPOS_BASE[t.id] = { label: t.nombre, color: t.color, dias: +t.dias || 1, aviso: !!t.aviso, bloquea: t.bloquea !== false, activo: t.activo !== false, cls: t.id };
+    const c = /^#[0-9a-f]{6}$/i.test(t.color) ? t.color : '#6B5D43', id = String(t.id).replace(/[^a-z0-9_-]/gi, '');
+    css += `.t-${id}{color:${c}}.bg-${id}{background:${c}}.abs-btns .b-${id}{color:${c};border-color:${c}66}.tl .bar.bg-${id}{color:${textOn(c)}}.pill.t-${id}{border-color:${c}}\n`;
+  });
+  let st = document.getElementById('tipo-colors');
+  if (!st) { st = document.createElement('style'); st.id = 'tipo-colors'; document.head.appendChild(st); }
+  if (st.textContent !== css) st.textContent = css;
+}
+const blocks = (a) => TIPOS[a.tipo].bloquea && (a.tipo !== 'vacaciones' || a.estado !== 'solicitada');
+const tiposActivos = (cur) => Object.entries(TIPOS_BASE).filter(([k, t]) => t.activo || k === cur);
 const ROLES = { chofer: 'Chofer', ayudante: 'Ayudante', ambos: 'Chofer y ayudante', otro: 'Otro' };
 const PUESTOS = ['Empacador', 'Empacadora', 'Verificador', 'Verificadora', 'Bodeguero', 'Auxiliar', 'Supervisor'];
 const isChofer = (p) => p.rol === 'chofer' || p.rol === 'ambos';
@@ -264,11 +296,11 @@ function dayPeople(day) {
   return ids;
 }
 function conflicts(day) {
-  const abs = absencesOn(day.id).filter((a) => a.tipo !== 'vacaciones' || a.estado !== 'solicitada');
+  const abs = absencesOn(day.id).filter(blocks);
   const ids = dayPeople(day);
   return abs.filter((a) => ids.has(a.personId));
 }
-function absentIds(iso) { return new Set(absencesOn(iso).filter((a) => a.tipo !== 'vacaciones' || a.estado !== 'solicitada').map((a) => a.personId)); }
+function absentIds(iso) { return new Set(absencesOn(iso).filter(blocks).map((a) => a.personId)); }
 
 /* ---------------- UI estado ---------------- */
 const ui = {
@@ -300,6 +332,7 @@ function renderShell() {
 }
 
 function render() {
+  rebuildTipos();
   renderShell();
   const v = $('#view');
   const fn = { dia: viewDay, semana: viewWeek, ausencias: viewAbsences, consultas: viewQueries, parametros: viewParams, ajustes: viewSettings }[ui.view];
@@ -477,12 +510,7 @@ function viewDay() {
         ${apo || '<div class="empty">Sin apoyo.</div>'}</section>
       <section class="sec"><div class="sec-h"><h2>Faltas · Permisos · Vacaciones</h2></div>
         ${absH || '<div class="empty">Nadie ausente.</div>'}
-        <div class="abs-btns">
-          <button class="btn sm b-falta" data-act="abs-new" data-tipo="falta">+ Falta</button>
-          <button class="btn sm b-permiso" data-act="abs-new" data-tipo="permiso">+ Permiso</button>
-          <button class="btn sm" data-act="abs-new" data-tipo="vacaciones">+ Vacaciones</button>
-          <button class="btn sm b-igss" data-act="abs-new" data-tipo="igss">+ Suspensión IGSS</button>
-          <button class="btn sm b-cita" data-act="abs-new" data-tipo="cita">+ Cita IGSS</button>
+        <div class="abs-btns">${tiposActivos().map(([k, t]) => `<button class="btn sm b-${k}" data-act="abs-new" data-tipo="${k}">+ ${esc(t.label)}</button>`).join('')}
         </div></section>
       <section class="sec"><div class="sec-h"><h2>Día</h2></div>
         <div class="row">
@@ -557,7 +585,7 @@ function viewAbsences() {
       <div><div class="dtitle">Calendario de ausencias</div><div class="dsub">${fmtShort(start)} – ${fmtLong(end)}</div></div>
       <button class="btn icon" data-act="tl-next" aria-label="Siguiente">${ic('right')}</button></div>
       <div class="row acts"><button class="btn" data-act="tl-today">Hoy</button><button class="btn dark" data-act="abs-new" data-tipo="vacaciones">+ Solicitud de vacaciones</button><button class="btn" data-act="abs-new" data-tipo="falta">+ Otra ausencia</button></div></div>
-    <div class="legend"><span><i class="bg-vacaciones"></i>Vacaciones confirmadas</span><span><i style="border:2px dashed #2B2A26"></i>Vacaciones solicitadas (aprox.)</span><span><i class="bg-permiso"></i>Permiso</span><span><i class="bg-falta"></i>Falta</span><span><i class="bg-igss"></i>Suspensión IGSS</span><span><i class="bg-cita"></i>Cita IGSS</span><span><i style="background:#E3D7BE"></i>Domingo</span><span><i style="background:#EAD9C0"></i>Feriado</span></div>
+    <div class="legend"><span><i class="bg-vacaciones"></i>Vacaciones confirmadas</span><span><i style="border:2px dashed #2B2A26"></i>Vacaciones solicitadas (aprox.)</span>${tiposActivos().filter(([k]) => k !== 'vacaciones').map(([k, t]) => `<span><i class="bg-${k}"></i>${esc(t.label)}</span>`).join('')}<span><i style="background:#E3D7BE"></i>Domingo</span><span><i style="background:#EAD9C0"></i>Feriado</span></div>
     <div class="tl-wrap">${head}${rows || '<div class="empty" style="padding:16px">Sin ausencias en este período.</div>'}</div>
     <div class="panel" style="margin-top:16px"><h2 style="font-size:16px">Vacaciones pendientes de confirmar por RRHH</h2>
       ${pend.length ? pend.map((a) => `<div class="row"><span><b>${esc(pname(a.personId))}</b> · ${fmtRange(a.desde, a.hasta)}</span><span class="spacer"></span><button class="btn sm" data-act="abs-edit" data-id="${a.id}">Confirmar fechas</button></div>`).join('') : '<div class="empty">Ninguna.</div>'}</div>`;
@@ -625,7 +653,7 @@ function yearsAvailable() {
 
 /* ---------------- Vista: Parámetros ---------------- */
 function viewParams() {
-  const tabs = [['camiones', 'Camiones'], ['personal', 'Colaboradores'], ['clientes', 'Clientes'], ['productos', 'Productos de empaque'], ['feriados', 'Feriados']];
+  const tabs = [['camiones', 'Camiones'], ['personal', 'Colaboradores'], ['clientes', 'Clientes'], ['productos', 'Productos de empaque'], ['motivos', 'Motivos de ausencia'], ['feriados', 'Feriados']];
   let body = '';
   const t = ui.paramTab;
   if (t === 'camiones') {
@@ -656,6 +684,12 @@ function viewParams() {
   } else if (t === 'productos') {
     body = `<div class="sec-h"><h2>Productos de empaque</h2><button class="btn sm dark" data-act="prod-new">+ Producto</button></div>
       <div class="tbl-wrap"><table class="tbl"><tr><th>Código</th><th>Descripción</th><th>Orden</th></tr>${products().map((p) => `<tr class="click" data-act="prod-edit" data-id="${p.id}"><td><b>${esc(p.codigo)}</b></td><td>${esc(p.desc || '')}</td><td>${p.orden ?? ''}</td></tr>`).join('')}</table></div>`;
+  } else if (t === 'motivos') {
+    const usos = {}; all('absences').forEach((a) => (usos[a.tipo] = (usos[a.tipo] || 0) + 1));
+    body = `<div class="sec-h"><h2>Motivos de ausencia</h2><button class="btn sm dark" data-act="tipo-new">+ Motivo</button></div>
+      <div class="hint">Cambia el nombre o el color, cuántos días dura por defecto, si avisa por WhatsApp al registrarlo y si impide asignar rutas ese día. Los 5 motivos de fábrica no se borran, pero puedes ocultarlos.</div>
+      <div class="tbl-wrap"><table class="tbl"><tr><th>Color</th><th>Motivo</th><th>Días por defecto</th><th>Aviso WhatsApp</th><th>Bloquea rutas</th><th>Registros</th><th>Estado</th></tr>
+      ${tipoRecs().map((x) => `<tr class="click ${x.activo === false ? 'off' : ''}" data-act="tipo-edit" data-id="${x.id}"><td><span class="swatch" style="background:${esc(x.color)}"></span></td><td><b class="t-${x.id}">${esc(x.nombre)}</b>${SYS_TIPOS.has(x.id) ? ' <span class="small muted">· de fábrica</span>' : ''}</td><td>${+x.dias || 1}</td><td>${x.id === 'vacaciones' ? 'Al confirmar' : x.aviso ? 'Sí' : '—'}</td><td>${x.bloquea !== false ? 'Sí' : '—'}</td><td>${usos[x.id] || 0}</td><td>${x.activo === false ? 'Oculto' : 'Activo'}</td></tr>`).join('')}</table></div>`;
   } else {
     const hs = all('holidays').sort((a, b) => a.fecha.localeCompare(b.fecha));
     body = `<div class="sec-h"><h2>Feriados</h2><button class="btn sm dark" data-act="hol-new">+ Feriado</button></div>
@@ -674,7 +708,7 @@ function waSettings() {
   const custom = !!get('templates', 'wa-' + k);
   return `<div class="panel" id="wa-settings"><h2 style="font-size:16px">Mensajes de WhatsApp</h2>
     <div class="hint">Escribe el mensaje una vez por tipo. Toca una variable para insertarla donde está el cursor. Si una variable queda vacía (por ejemplo, sin tarjeta), esa línea no se envía. Usa *texto* para negrita.</div>
-    <div class="tabs">${WA_KINDS.map(([kk, l]) => `<button class="tab ${kk === k ? 'on' : ''}" data-act="wa-kind" data-k="${kk}">${l}</button>`).join('')}</div>
+    <div class="tabs">${waKinds().map(([kk, l]) => `<button class="tab ${kk === k ? 'on' : ''}" data-act="wa-kind" data-k="${kk}">${l}</button>`).join('')}</div>
     <div class="grid2" style="align-items:start">
       <div class="field"><label for="wa-tpl">Plantilla${custom ? '' : ' (predeterminada)'}</label><textarea id="wa-tpl" class="inp" style="min-height:190px;font-family:ui-monospace,Menlo,monospace;font-size:13px" data-wa-tpl>${esc(tpl)}</textarea>
         <div class="chips">${WA_VARS.map(([v, l]) => `<button type="button" class="chip" data-act="wa-var" data-v="${v}" title="${l}">{${v}}</button>`).join('')}</div></div>
@@ -855,7 +889,7 @@ function unavailable(idx, r, ci) {
   });
   r.camiones.forEach((c, k) => { if (k !== ci) [c.chofer, ...(c.ayudantes || [])].forEach((id) => id && !m.has(id) && m.set(id, { kind: 'busy', label: 'en camión ' + (k + 1) })); });
   (getDay(ui.date).z18.apoyo || []).forEach((a) => a.chofer && !m.has(a.chofer) && m.set(a.chofer, { kind: 'busy', label: 'apoyo Z18' }));
-  absencesOn(ui.date).filter((a) => a.tipo !== 'vacaciones' || a.estado !== 'solicitada').forEach((a) => m.set(a.personId, { kind: 'abs', label: TIPOS[a.tipo].label }));
+  absencesOn(ui.date).filter(blocks).forEach((a) => m.set(a.personId, { kind: 'abs', label: TIPOS[a.tipo].label }));
   return m;
 }
 /* Disponibles primero; los ya elegidos se quedan en su lugar */
@@ -918,7 +952,7 @@ function rutaChange(field, el) {
 /* Editor de ausencia */
 function absModal(id, tipo) {
   const a = id ? clone(get('absences', id)) : { id: uid(), personId: '', tipo: tipo || 'falta', desde: ui.view === 'dia' ? ui.date : todayISO(), hasta: '', motivo: '', estado: 'solicitada' };
-  if (!a.hasta) a.hasta = a.tipo === 'vacaciones' ? addDays(a.desde, 14) : a.desde;
+  if (!a.hasta) a.hasta = addDays(a.desde, TIPOS[a.tipo].dias - 1);
   modalCtx = { kind: 'abs', a, isNew: !id };
   openPick = id ? null : 'ap';
   drawAbs();
@@ -927,11 +961,11 @@ function drawAbs() {
   const { a, isNew } = modalCtx;
   const dias = diffDays(a.desde, a.hasta) + 1;
   modal(`<h2>${isNew ? 'Registrar ausencia' : 'Editar ausencia'}</h2>
-    <div class="field"><span class="flabel">Tipo</span><div class="chips">${Object.entries(TIPOS).map(([k, t]) => `<button type="button" class="chip ${a.tipo === k ? 'on' : ''}" data-aact="tipo" data-k="${k}"><span class="dot bg-${k}"></span>${t.label}</button>`).join('')}</div></div>
+    <div class="field"><span class="flabel">Tipo</span><div class="chips">${tiposActivos(a.tipo).map(([k, t]) => `<button type="button" class="chip ${a.tipo === k ? 'on' : ''}" data-aact="tipo" data-k="${k}"><span class="dot bg-${k}"></span>${t.label}</button>`).join('')}</div></div>
     <div class="field"><span class="flabel">Colaborador</span>${picker('ap', { layout: 'person', label: 'Colaborador', rows: people().filter((p) => p.activo !== false || p.id === a.personId).map((p) => { const ex = absencesOn(a.desde).find((x) => x.personId === p.id && x.id !== a.id); return personRow(p, ex ? { kind: 'abs', label: TIPOS[ex.tipo].label } : null, { dis: false }); }), sel: a.personId, placeholder: 'Elegir colaborador…' })}</div>
     <div class="grid2"><div class="field"><label for="a-d">Desde</label><input id="a-d" class="inp" type="date" value="${a.desde}" data-achange="desde"></div>
     <div class="field"><label for="a-h">Hasta</label><input id="a-h" class="inp" type="date" value="${a.hasta}" data-achange="hasta"></div></div>
-    <div class="hint">${dias} día(s) calendario${a.tipo === 'vacaciones' ? ' · normalmente 15' : ''}</div>
+    <div class="hint">${dias} día(s) calendario${TIPOS[a.tipo].dias > 1 ? ' · normalmente ' + TIPOS[a.tipo].dias : ''}</div>
     ${a.tipo === 'vacaciones' ? `<div class="field"><span class="flabel">Estado</span><div class="seg"><button type="button" class="btn ${a.estado === 'solicitada' ? 'navy' : ''}" data-aact="estado" data-k="solicitada">Solicitadas (aprox.)</button><button type="button" class="btn ${a.estado === 'confirmada' ? 'navy' : ''}" data-aact="estado" data-k="confirmada">Confirmadas por RRHH</button></div></div>` : ''}
     <div class="field"><label for="a-m">${a.tipo === 'falta' ? 'Motivo (vacío si no se reportó)' : a.tipo === 'cita' ? 'Detalle (hora, clínica…)' : a.tipo === 'igss' ? 'Detalle (opcional)' : 'Motivo'}</label><input id="a-m" class="inp" value="${esc(a.motivo)}" data-achange="motivo"></div>
     ${!isNew ? `<div class="row"><button type="button" class="btn sm wa" data-act="wa" data-id="${a.id}">${ic('wa')}Enviar por WhatsApp</button>${a.comunicado ? '<span class="small t-permiso">Enviado ' + new Date(a.comunicado).toLocaleDateString('es-GT') + '</span>' : ''}</div>` : ''}
@@ -939,7 +973,7 @@ function drawAbs() {
 }
 function absAction(act, el) {
   const { a } = modalCtx;
-  if (act === 'tipo') { const old = a.tipo; a.tipo = el.dataset.k; if (a.tipo === 'vacaciones' && old !== 'vacaciones' && a.hasta === a.desde) a.hasta = addDays(a.desde, 14); drawAbs(); }
+  if (act === 'tipo') { const old = a.tipo; a.tipo = el.dataset.k; if (old !== a.tipo && modalCtx.isNew) a.hasta = addDays(a.desde, TIPOS[a.tipo].dias - 1); drawAbs(); }
   else if (act === 'estado') { a.estado = el.dataset.k; drawAbs(); }
   else if (act === 'del') { const id = a.id; confirmBox('¿Borrar esta ausencia?', 'Borrar', true).then((ok) => { if (ok) del('absences', id); render(); }); }
   else if (act === 'save') {
@@ -1064,10 +1098,17 @@ function waTitle(a) {
   return 'Falta registrada';
 }
 /* Plantillas de WhatsApp: se guardan en "templates" con id wa-<clave> para sincronizarse */
-const WA_KINDS = [
-  ['permiso', 'Permiso autorizado'], ['vacaciones', 'Vacaciones autorizadas'], ['solicitud', 'Solicitud de vacaciones'],
-  ['falta', 'Falta'], ['igss', 'Suspensión IGSS'], ['cita', 'Cita IGSS'],
-];
+const WA_TITLES = { permiso: 'Permiso autorizado', vacaciones: 'Vacaciones autorizadas', solicitud: 'Solicitud de vacaciones', falta: 'Falta registrada' };
+function waKinds() {
+  const out = [];
+  Object.entries(TIPOS_BASE).forEach(([k, t]) => {
+    if (!t.activo) return;
+    if (k === 'vacaciones') out.push(['vacaciones', 'Vacaciones autorizadas'], ['solicitud', 'Solicitud de vacaciones']);
+    else out.push([k, k === 'falta' ? 'Falta' : WA_TITLES[k] || t.label]);
+  });
+  return out;
+}
+function waDefault(kind) { return WA_DEFAULT[kind] || '*' + (TIPOS[kind].label) + '*\nColaborador: {nombre}\nTarjeta: {tarjeta}\nPuesto: {puesto}\n{fechas}\nMotivo: {motivo}'; }
 const WA_DEFAULT = {
   permiso: '*Permiso autorizado*\nColaborador: {nombre}\nTarjeta: {tarjeta}\nPuesto: {puesto}\n{fechas}\nMotivo: {motivo}',
   vacaciones: '*Vacaciones autorizadas*\nColaborador: {nombre}\nTarjeta: {tarjeta}\nPuesto: {puesto}\n{fechas}\nObservaciones: {motivo}',
@@ -1081,7 +1122,7 @@ const WA_VARS = [
   ['desde', 'Fecha inicio'], ['hasta', 'Fecha fin'], ['dias', 'Días'], ['motivo', 'Motivo'], ['tipo', 'Tipo'], ['hoy', 'Fecha de hoy'],
 ];
 function waKind(a) { return a.tipo === 'vacaciones' ? (a.estado === 'solicitada' ? 'solicitud' : 'vacaciones') : a.tipo; }
-function waTemplate(kind) { const t = get('templates', 'wa-' + kind); return t && typeof t.texto === 'string' ? t.texto : WA_DEFAULT[kind]; }
+function waTemplate(kind) { const t = get('templates', 'wa-' + kind); return t && typeof t.texto === 'string' ? t.texto : waDefault(kind); }
 function waVars(a) {
   const p = get('people', a.personId) || {};
   const h = a.hasta || a.desde, n = diffDays(a.desde, h) + 1;
@@ -1101,7 +1142,7 @@ function fillTemplate(tpl, vars) {
     return line.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? vars[k] : m));
   }).filter((l) => l !== null).join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
-function waTitle(a) { return (WA_KINDS.find(([k]) => k === waKind(a)) || [, ''])[1]; }
+function waTitle(a) { const k = waKind(a); return WA_TITLES[k] || TIPOS[a.tipo].label; }
 function waText(a) { return fillTemplate(waTemplate(waKind(a)), waVars(a)); }
 const WA_SAMPLE = { personId: '', tipo: 'permiso', desde: todayISO(), hasta: todayISO(), motivo: 'Cita médica', estado: 'confirmada' };
 function waSampleVars(kind) {
@@ -1110,7 +1151,7 @@ function waSampleVars(kind) {
   return Object.assign(waVars(a), { nombre: 'María López', tarjeta: '10452', puesto: 'Verificadora', area: 'Despacho' });
 }
 function shouldNotify(a, before) {
-  if (a.tipo === 'permiso' || a.tipo === 'cita') return !before || before.tipo !== a.tipo || !a.comunicado;
+  if (a.tipo !== 'vacaciones' && TIPOS[a.tipo].aviso) return !before || before.tipo !== a.tipo || !a.comunicado;
   if (a.tipo === 'vacaciones' && a.estado === 'confirmada') return !before || before.estado !== 'confirmada' || before.tipo !== 'vacaciones';
   return false;
 }
@@ -1142,6 +1183,45 @@ async function waAction(act) {
   const a = get('absences', id);
   if (a) { const c = clone(a); c.comunicado = Date.now(); put('absences', c); }
   closeModal(); render(); toast(ok ? 'Mensaje compartido' : 'WhatsApp abierto · el mensaje también quedó copiado');
+}
+
+/* Editor de motivos de ausencia */
+const COLORES = ['#B3261E', '#D9480F', '#B7791F', '#2E6B3A', '#138A4E', '#0E7C7B', '#1F4E9A', '#5B3FA8', '#A3367A', '#2B2A26', '#6B5D43', '#7A7A7A'];
+function tipoModal(id) {
+  const base = id ? tipoRecs().find((x) => x.id === id) : null;
+  const t = base ? clone(base) : { id: 't' + uid(), nombre: '', color: '#0E7C7B', dias: 1, aviso: false, bloquea: true, activo: true, orden: tipoRecs().length };
+  modalCtx = { kind: 'tipo', t, isNew: !id }; drawTipo();
+}
+function drawTipo() {
+  const { t, isNew } = modalCtx, sys = SYS_TIPOS.has(t.id);
+  const tog = (k, l, a, b) => `<div class="field"><span class="flabel">${l}</span><div class="seg"><button type="button" class="btn ${t[k] !== false && t[k] ? 'navy' : ''}" data-yact="set" data-k="${k}" data-v="1">${a}</button><button type="button" class="btn ${!(t[k] !== false && t[k]) ? 'navy' : ''}" data-yact="set" data-k="${k}" data-v="">${b}</button></div></div>`;
+  modal(`<h2>${isNew ? 'Nuevo motivo' : 'Editar motivo'}${sys ? ' <span class="small muted">(de fábrica)</span>' : ''}</h2>
+    <div class="field"><label for="y-n">Nombre</label><input id="y-n" class="inp" value="${esc(t.nombre)}" data-ychange="nombre" placeholder="Ej. Licencia, Capacitación, Cita médica"></div>
+    <div class="field"><span class="flabel">Color</span><div class="chips">${COLORES.map((c) => `<button type="button" class="swatch-btn ${String(t.color).toUpperCase() === c ? 'on' : ''}" style="background:${c}" data-yact="color" data-k="${c}" aria-label="Color ${c}"></button>`).join('')}
+      <label class="swatch-btn custom" title="Otro color"><input type="color" value="${esc(t.color)}" data-ychange="color" aria-label="Otro color"></label></div>
+      <div class="row"><span class="pill t-x" style="color:${esc(t.color)};border-color:${esc(t.color)}">${esc(t.nombre || 'Vista previa')}</span><span class="bar-prev" style="background:${esc(t.color)};color:${textOn(t.color)}">${esc(t.nombre || 'Vista previa')}</span></div></div>
+    <div class="field"><label for="y-d">Días por defecto al registrarlo</label><input id="y-d" class="inp" type="number" min="1" max="60" style="max-width:120px" value="${+t.dias || 1}" data-ychange="dias"></div>
+    ${t.id === 'vacaciones' ? '<div class="hint">Vacaciones avisa por WhatsApp al confirmarlas por RRHH y revisa traslapes; eso no cambia.</div>' : tog('aviso', 'Al registrarlo, abrir el aviso por WhatsApp', 'Sí', 'No')}
+    ${tog('bloquea', 'Impide asignarle rutas ese día', 'Sí', 'No')}
+    ${tog('activo', 'Estado', 'Activo', 'Oculto')}
+    <div class="modal-foot">${!isNew && !sys ? '<button class="btn danger left" data-yact="del">Borrar</button>' : ''}<button class="btn" data-close>Cancelar</button><button class="btn dark" data-yact="save">Guardar</button></div>`, modalCtx);
+}
+function tipoAction(act, el) {
+  const { t } = modalCtx;
+  if (act === 'set') t[el.dataset.k] = !!el.dataset.v;
+  else if (act === 'color') t.color = el.dataset.k;
+  else if (act === 'del') {
+    const id = t.id, n = all('absences').filter((a) => a.tipo === id).length;
+    if (n) return toast('Tiene ' + n + ' registro(s): ocúltalo en lugar de borrarlo');
+    return confirmBox('¿Borrar este motivo?', 'Borrar', true).then((ok) => { if (ok) del('abstypes', id); render(); });
+  } else if (act === 'save') {
+    t.nombre = String(t.nombre || '').trim();
+    if (!t.nombre) return toast('Escribe el nombre del motivo');
+    if (tipoRecs().some((x) => x.id !== t.id && norm(x.nombre) === norm(t.nombre))) return toast('Ya existe un motivo con ese nombre');
+    t.dias = Math.max(1, Math.min(60, parseInt(t.dias, 10) || 1));
+    put('abstypes', t); closeModal(); render(); toast('Motivo guardado'); return;
+  }
+  drawTipo();
 }
 
 /* Editores de parámetros */
@@ -1255,7 +1335,7 @@ async function applyTemplate() {
 
 /* ---------------- Eventos ---------------- */
 document.addEventListener('click', async (ev) => {
-  const el = ev.target.closest('[data-pk],[data-pkset],[data-nav],[data-act],[data-close],[data-cf],[data-ract],[data-aact],[data-tact],[data-sact],[data-wact],[data-mact],[data-bg]');
+  const el = ev.target.closest('[data-yact],[data-pk],[data-pkset],[data-nav],[data-act],[data-close],[data-cf],[data-ract],[data-aact],[data-tact],[data-sact],[data-wact],[data-mact],[data-bg]');
   if (!el) return;
   if (el.tagName === 'A' && el.getAttribute('href') === '#') ev.preventDefault();
   if (el.dataset.pk != null) { openPick = openPick === el.dataset.pk ? null : el.dataset.pk; return redraw(); }
@@ -1268,6 +1348,7 @@ document.addEventListener('click', async (ev) => {
   if (el.dataset.sact) return simpleAction(el.dataset.sact, el);
   if (el.dataset.wact) return waAction(el.dataset.wact);
   if (el.dataset.mact) return mtgAction(el.dataset.mact, el);
+  if (el.dataset.yact) return tipoAction(el.dataset.yact, el);
   if (el.hasAttribute('data-close') && !el.dataset.nav) return closeModal();
   if (el.dataset.nav) { if (el.hasAttribute('data-close')) closeModal(); return go(el.dataset.nav); }
   const a = el.dataset.act, i = +el.dataset.i;
@@ -1296,6 +1377,8 @@ document.addEventListener('click', async (ev) => {
     case 'abs-edit': absModal(el.dataset.id); break;
     case 'wa': waModal(el.dataset.id, false); break;
     case 'mtg-new': mtgModal(null); break;
+    case 'tipo-new': tipoModal(null); break;
+    case 'tipo-edit': tipoModal(el.dataset.id); break;
     case 'mtg-edit': mtgModal(el.dataset.id); break;
     case 'wa-kind': ui.waKind = el.dataset.k; ui.waDraft = null; render(); document.getElementById('wa-settings').scrollIntoView({ block: 'start' }); break;
     case 'wa-var': { const ta = $('#wa-tpl'); const ins = '{' + el.dataset.v + '}'; const a0 = ta.selectionStart ?? ta.value.length, b0 = ta.selectionEnd ?? ta.value.length; ta.value = ta.value.slice(0, a0) + ins + ta.value.slice(b0); ta.focus(); ta.setSelectionRange(a0 + ins.length, a0 + ins.length); ta.dispatchEvent(new Event('input', { bubbles: true })); break; }
@@ -1332,8 +1415,9 @@ document.addEventListener('click', async (ev) => {
 document.addEventListener('change', (ev) => {
   const el = ev.target;
   if (el.dataset.rchange) return rutaChange(el.dataset.rchange, el);
-  if (el.dataset.achange) { modalCtx.a[el.dataset.achange] = el.value; if (el.dataset.achange === 'desde' && modalCtx.a.hasta < el.value) modalCtx.a.hasta = modalCtx.a.tipo === 'vacaciones' ? addDays(el.value, 14) : el.value; if (el.dataset.achange !== 'motivo') drawAbs(); return; }
+  if (el.dataset.achange) { modalCtx.a[el.dataset.achange] = el.value; if (el.dataset.achange === 'desde' && modalCtx.a.hasta < el.value) modalCtx.a.hasta = addDays(el.value, TIPOS[modalCtx.a.tipo].dias - 1); if (el.dataset.achange !== 'motivo') drawAbs(); return; }
   if (el.dataset.tchange) { modalCtx.t[el.dataset.tchange] = el.value; return; }
+  if (el.dataset.ychange) { modalCtx.t[el.dataset.ychange] = el.value; if (el.dataset.ychange !== 'dias') drawTipo(); return; }
   if (el.dataset.mchange) { modalCtx.m[el.dataset.mchange] = el.value; if (el.dataset.mchange === 'url' && el.value) { const pl = detectPlatform(el.value); if (pl && pl !== modalCtx.m.plataforma) { modalCtx.m.plataforma = pl; drawMtg(); } } return; }
   if (el.dataset.schange) { modalCtx.r[el.dataset.schange] = el.value; return; }
   const c = el.dataset.change; if (!c) return;
