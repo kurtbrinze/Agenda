@@ -2,6 +2,10 @@
 
 La versión visible en la app está en `js/app.js` (`VERSION` y `CHANGELOG`). Cada actualización sube la versión.
 
+## V.15 — 2026-11-26
+- Centro de Control: al volver a la Agenda dentro del centro trae lo último de la nube; si ahí la sincronización está apagada, aviso fijo con «Activar» (el navegador guarda los datos del marco aparte).
+- Le manda al centro el resumen de hoy y del próximo día con actividad (rutas, empaques, personal, ausencias, reuniones y notas) para su tarjeta del inicio. Sólo a la dirección del centro.
+
 ## V.14 — 2026-11-26
 - Todas las selecciones de colaboradores, camiones y productos se hacen en tablas con columnas y buscador:
   - Colaborador (nombre y tarjeta) · Puesto · Estado (Disponible, en otra ruta, Vacaciones…)
