@@ -2,7 +2,7 @@
 (function () {
 'use strict';
 
-const VERSION = 'V.17';
+const VERSION = 'V.18';
 const CHANGELOG = [
   ['V.17', '2026-11-26', 'Motivos de ausencia configurables en Parámetros: nombre, color, días por defecto, aviso por WhatsApp y si bloquea rutas. Se pueden agregar motivos nuevos.'],
   ['V.16', '2026-11-26', 'Nuevo tipo de ausencia “Cita IGSS” en verde, separado de “Suspensión IGSS” (azul); con su botón, leyenda, plantilla de WhatsApp y aviso al registrarla.'],
@@ -61,13 +61,23 @@ function textOn(hex) {
   const n = parseInt(m[1], 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
   return 0.299 * r + 0.587 * g + 0.114 * b > 160 ? '#2B2A26' : '#FFFFFF';
 }
+/* Mezcla un color con blanco hasta que se lea sobre el tema oscuro. */
+function aclarar(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || ''); if (!m) return '#D1D5DB';
+  const n = parseInt(m[1], 16); let r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+  const luz = () => 0.299 * r + 0.587 * g + 0.114 * b;
+  for (let i = 0; i < 8 && luz() < 150; i++) { r += (255 - r) * 0.22; g += (255 - g) * 0.22; b += (255 - b) * 0.22; }
+  return '#' + [r, g, b].map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
+}
 function rebuildTipos() {
   Object.keys(TIPOS_BASE).forEach((k) => delete TIPOS_BASE[k]);
   let css = '';
   tipoRecs().forEach((t) => {
     TIPOS_BASE[t.id] = { label: t.nombre, color: t.color, dias: +t.dias || 1, aviso: !!t.aviso, bloquea: t.bloquea !== false, activo: t.activo !== false, cls: t.id };
     const c = /^#[0-9a-f]{6}$/i.test(t.color) ? t.color : '#6B5D43', id = String(t.id).replace(/[^a-z0-9_-]/gi, '');
-    css += `.t-${id}{color:${c}}.bg-${id}{background:${c}}.abs-btns .b-${id}{color:${c};border-color:${c}66}.tl .bar.bg-${id}{color:${textOn(c)}}.pill.t-${id}{border-color:${c}}\n`;
+    /* Sobre el fondo oscuro, el texto usa el mismo color aclarado para que se lea. */
+    const ct = aclarar(c);
+    css += `.t-${id}{color:${ct}}.bg-${id}{background:${c}}.abs-btns .b-${id}{color:${ct};border-color:${ct}66}.tl .bar.bg-${id}{color:${textOn(c)}}.pill.t-${id}{border-color:${ct}}\n`;
   });
   let st = document.getElementById('tipo-colors');
   if (!st) { st = document.createElement('style'); st.id = 'tipo-colors'; document.head.appendChild(st); }
@@ -133,17 +143,17 @@ const I = {
   sync: '<path d="M20 11a8 8 0 0 0-14-5l-2 2M4 13a8 8 0 0 0 14 5l2-2"/><path d="M4 4v4h4M20 20v-4h-4"/>',
 };
 const ic = (n) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[n]}</svg>`;
-const appIcon = (s) => `<svg width="${s}" height="${s}" viewBox="0 0 48 48" aria-hidden="true"><rect width="48" height="48" rx="11" fill="#1B2A4A"/><rect x="14" y="9" width="23" height="30" rx="3" fill="#F3EAD6"/><path d="M19 17h13M19 22h13M19 27h9" stroke="#1B2A4A" stroke-width="2" stroke-linecap="round"/><path d="M11 14h6M11 20h6M11 26h6M11 32h6" stroke="#C9B98F" stroke-width="2.4" stroke-linecap="round"/></svg>`;
+const appIcon = (s) => `<svg width="${s}" height="${s}" viewBox="0 0 48 48" aria-hidden="true"><rect width="48" height="48" rx="11" fill="var(--rz-elev,#1F232B)"/><rect x="14" y="9" width="23" height="30" rx="3" fill="#F3EAD6"/><path d="M19 17h13M19 22h13M19 27h9" stroke="#1B2A4A" stroke-width="2" stroke-linecap="round"/><path d="M11 14h6M11 20h6M11 26h6M11 32h6" stroke="#C9B98F" stroke-width="2.4" stroke-linecap="round"/></svg>`;
 let rzN = 0;
 /* Logo oficial Rinze Studio (icons/rinze-studio.svg) */
 const rinze = (h = 22) => {
   const g = 'rzg' + rzN, t = 'rzt' + rzN, f = 'rzf' + (rzN++);
   const st = `fill="none" stroke="url(#${g})" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"`;
   return `<span class="rinze" title="Rinze Studio"><svg role="img" aria-label="Rinze Studio" height="${h}" width="${Math.round(h * 920 / 320)}" viewBox="0 0 920 320"><defs>
-<linearGradient id="${g}" x1="10%" y1="10%" x2="90%" y2="90%"><stop offset="0%" stop-color="#68FF6B"/><stop offset="45%" stop-color="#00FF88"/><stop offset="100%" stop-color="#00C4FF"/></linearGradient>
-<linearGradient id="${t}" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#68FF6B"/><stop offset="100%" stop-color="#4ADE80"/></linearGradient>
+<linearGradient id="${g}" x1="10%" y1="10%" x2="90%" y2="90%"><stop offset="0%" style="stop-color:var(--rz-logo-1,#F3F4F6)"/><stop offset="45%" style="stop-color:var(--rz-logo-2,#9CA3AF)"/><stop offset="100%" style="stop-color:var(--rz-logo-2,#9CA3AF)"/></linearGradient>
+<linearGradient id="${t}" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" style="stop-color:var(--rz-logo-1,#F3F4F6)"/><stop offset="100%" style="stop-color:var(--rz-logo-2,#9CA3AF)"/></linearGradient>
 <filter id="${f}" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="5" result="blur"/><feComposite in="SourceGraphic" in2="blur" operator="over"/></filter></defs>
-<g transform="translate(55,45)" filter="url(#${f})"><path d="M35 25L135 25A68 68 0 0 1 135 161L122 161L195 235L152 235L88 168L58 168L58 235L35 235L35 142L85 142" ${st}/><path d="M85 68L132 68A26 26 0 0 1 132 120L95 120" ${st}/><path d="M35 102L35 25L85 142" ${st}/>
+<g transform="translate(55,45)"><path d="M35 25L135 25A68 68 0 0 1 135 161L122 161L195 235L152 235L88 168L58 168L58 235L35 235L35 142L85 142" ${st}/><path d="M85 68L132 68A26 26 0 0 1 132 120L95 120" ${st}/><path d="M35 102L35 25L85 142" ${st}/>
 <g fill="url(#${g})"><circle cx="35" cy="25" r="13"/><circle cx="85" cy="68" r="12"/><circle cx="85" cy="142" r="12"/><circle cx="122" cy="161" r="12"/><circle cx="35" cy="235" r="13"/><circle cx="195" cy="235" r="13"/></g></g>
 <g transform="translate(315,45)" font-family="Inter,-apple-system,'Segoe UI',Roboto,sans-serif"><text x="0" y="138" font-size="136" font-weight="600" fill="#FFFFFF" letter-spacing="-2">Rinze</text><text x="6" y="218" font-size="52" font-weight="500" fill="url(#${t})" letter-spacing="22">STUDIO</text></g></svg></span>`;
 };
@@ -324,7 +334,7 @@ function renderShell() {
   $('#sidebar').innerHTML = `
     <div class="brand">${appIcon(36)}<b>Agenda</b></div>
     ${NAV.map(([k, l, i]) => `<button class="nav-item ${ui.view === k ? 'active' : ''}" data-nav="${k}">${ic(i)}${l}</button>`).join('')}
-    <div class="side-foot">${rinze(30)}<button class="sync" data-act="sync-now"><span class="dot" data-syncdot></span><span data-synctext></span></button><span class="version">Agenda ${VERSION}</span></div>`;
+    <div class="side-foot"><span class="rz-solo-fuera">${rinze(30)}</span><button class="sync" data-act="sync-now"><span class="dot" data-syncdot></span><span data-synctext></span></button><span class="version rz-solo-fuera">Agenda ${VERSION}</span></div>`;
   $('#topbar').innerHTML = `<div class="brand">${appIcon(26)}<b>Agenda</b><span class="version">${VERSION}</span><button class="sync" data-act="sync-now" aria-label="Estado de sincronización"><span class="dot" data-syncdot></span></button></div>${rinze(22)}`;
   const bn = [['dia', 'Hoy', 'book'], ['semana', 'Semana', 'week'], ['ausencias', 'Ausencias', 'cal'], ['consultas', 'Consultas', 'search'], ['mas', 'Más', 'more']];
   $('#bottomnav').innerHTML = bn.map(([k, l, i]) => `<button class="bn-item ${ui.view === k || (k === 'mas' && ['parametros', 'ajustes'].includes(ui.view)) ? 'active' : ''}" data-nav="${k}">${ic(i)}${l}</button>`).join('');
@@ -585,7 +595,7 @@ function viewAbsences() {
       <div><div class="dtitle">Calendario de ausencias</div><div class="dsub">${fmtShort(start)} – ${fmtLong(end)}</div></div>
       <button class="btn icon" data-act="tl-next" aria-label="Siguiente">${ic('right')}</button></div>
       <div class="row acts"><button class="btn" data-act="tl-today">Hoy</button><button class="btn dark" data-act="abs-new" data-tipo="vacaciones">+ Solicitud de vacaciones</button><button class="btn" data-act="abs-new" data-tipo="falta">+ Otra ausencia</button></div></div>
-    <div class="legend"><span><i class="bg-vacaciones"></i>Vacaciones confirmadas</span><span><i style="border:2px dashed #2B2A26"></i>Vacaciones solicitadas (aprox.)</span>${tiposActivos().filter(([k]) => k !== 'vacaciones').map(([k, t]) => `<span><i class="bg-${k}"></i>${esc(t.label)}</span>`).join('')}<span><i style="background:#E3D7BE"></i>Domingo</span><span><i style="background:#EAD9C0"></i>Feriado</span></div>
+    <div class="legend"><span><i class="bg-vacaciones"></i>Vacaciones confirmadas</span><span><i style="border:2px dashed var(--rz-tx2,#9CA3AF)"></i>Vacaciones solicitadas (aprox.)</span>${tiposActivos().filter(([k]) => k !== 'vacaciones').map(([k, t]) => `<span><i class="bg-${k}"></i>${esc(t.label)}</span>`).join('')}<span><i style="background:#1A1D22;border:1px solid #323741"></i>Domingo</span><span><i style="background:rgba(217,119,6,.15);border:1px solid rgba(217,119,6,.3)"></i>Feriado</span></div>
     <div class="tl-wrap">${head}${rows || '<div class="empty" style="padding:16px">Sin ausencias en este período.</div>'}</div>
     <div class="panel" style="margin-top:16px"><h2 style="font-size:16px">Vacaciones pendientes de confirmar por RRHH</h2>
       ${pend.length ? pend.map((a) => `<div class="row"><span><b>${esc(pname(a.personId))}</b> · ${fmtRange(a.desde, a.hasta)}</span><span class="spacer"></span><button class="btn sm" data-act="abs-edit" data-id="${a.id}">Confirmar fechas</button></div>`).join('') : '<div class="empty">Ninguna.</div>'}</div>`;
@@ -712,7 +722,7 @@ function waSettings() {
     <div class="grid2" style="align-items:start">
       <div class="field"><label for="wa-tpl">Plantilla${custom ? '' : ' (predeterminada)'}</label><textarea id="wa-tpl" class="inp" style="min-height:190px;font-family:ui-monospace,Menlo,monospace;font-size:13px" data-wa-tpl>${esc(tpl)}</textarea>
         <div class="chips">${WA_VARS.map(([v, l]) => `<button type="button" class="chip" data-act="wa-var" data-v="${v}" title="${l}">{${v}}</button>`).join('')}</div></div>
-      <div class="field"><span class="flabel">Vista previa (ejemplo)</span><div class="card" id="wa-preview" style="white-space:pre-wrap;font-size:14px;line-height:1.5;background:#E7F6EC;border-color:#BFE3CB">${esc(fillTemplate(tpl, waSampleVars(k)))}</div></div>
+      <div class="field"><span class="flabel">Vista previa (ejemplo)</span><div class="card" id="wa-preview" style="white-space:pre-wrap;font-size:14px;line-height:1.5;background:var(--rz-ok-bg,rgba(22,163,74,.15));border-color:var(--rz-ok-borde,rgba(22,163,74,.3))">${esc(fillTemplate(tpl, waSampleVars(k)))}</div></div>
     </div>
     <div class="row"><button class="btn dark" data-act="wa-save">Guardar plantilla</button>${custom ? '<button class="btn" data-act="wa-reset">Restaurar predeterminada</button>' : ''}</div>
   </div>`;
