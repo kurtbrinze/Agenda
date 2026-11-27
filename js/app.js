@@ -2,7 +2,7 @@
 (function () {
 'use strict';
 
-const VERSION = 'V.18';
+const VERSION = 'V.19';
 const CHANGELOG = [
   ['V.17', '2026-11-26', 'Motivos de ausencia configurables en Parámetros: nombre, color, días por defecto, aviso por WhatsApp y si bloquea rutas. Se pueden agregar motivos nuevos.'],
   ['V.16', '2026-11-26', 'Nuevo tipo de ausencia “Cita IGSS” en verde, separado de “Suspensión IGSS” (azul); con su botón, leyenda, plantilla de WhatsApp y aviso al registrarla.'],
@@ -77,7 +77,9 @@ function rebuildTipos() {
     const c = /^#[0-9a-f]{6}$/i.test(t.color) ? t.color : '#6B5D43', id = String(t.id).replace(/[^a-z0-9_-]/gi, '');
     /* Sobre el fondo oscuro, el texto usa el mismo color aclarado para que se lea. */
     const ct = aclarar(c);
-    css += `.t-${id}{color:${ct}}.bg-${id}{background:${c}}.abs-btns .b-${id}{color:${ct};border-color:${ct}66}.tl .bar.bg-${id}{color:${textOn(c)}}.pill.t-${id}{border-color:${ct}}\n`;
+    css += `.t-${id}{color:${ct}}.bg-${id}{background:${c}}.abs-btns .b-${id}{color:${ct};border-color:${ct}66}.tl .bar.bg-${id}{color:${textOn(c)}}.pill.t-${id}{border-color:${ct}}\n`
+      /* En el tema claro se usa el color tal cual. */
+      + `[data-tema="claro"] .t-${id}{color:${c}}[data-tema="claro"] .abs-btns .b-${id}{color:${c};border-color:${c}66}[data-tema="claro"] .pill.t-${id}{border-color:${c}}\n`;
   });
   let st = document.getElementById('tipo-colors');
   if (!st) { st = document.createElement('style'); st.id = 'tipo-colors'; document.head.appendChild(st); }
@@ -155,7 +157,7 @@ const rinze = (h = 22) => {
 <filter id="${f}" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="5" result="blur"/><feComposite in="SourceGraphic" in2="blur" operator="over"/></filter></defs>
 <g transform="translate(55,45)"><path d="M35 25L135 25A68 68 0 0 1 135 161L122 161L195 235L152 235L88 168L58 168L58 235L35 235L35 142L85 142" ${st}/><path d="M85 68L132 68A26 26 0 0 1 132 120L95 120" ${st}/><path d="M35 102L35 25L85 142" ${st}/>
 <g fill="url(#${g})"><circle cx="35" cy="25" r="13"/><circle cx="85" cy="68" r="12"/><circle cx="85" cy="142" r="12"/><circle cx="122" cy="161" r="12"/><circle cx="35" cy="235" r="13"/><circle cx="195" cy="235" r="13"/></g></g>
-<g transform="translate(315,45)" font-family="Inter,-apple-system,'Segoe UI',Roboto,sans-serif"><text x="0" y="138" font-size="136" font-weight="600" fill="#FFFFFF" letter-spacing="-2">Rinze</text><text x="6" y="218" font-size="52" font-weight="500" fill="url(#${t})" letter-spacing="22">STUDIO</text></g></svg></span>`;
+<g transform="translate(315,45)" font-family="Inter,-apple-system,'Segoe UI',Roboto,sans-serif"><text x="0" y="138" font-size="136" font-weight="600" fill="var(--rz-tx,#F3F4F6)" letter-spacing="-2">Rinze</text><text x="6" y="218" font-size="52" font-weight="500" fill="url(#${t})" letter-spacing="22">STUDIO</text></g></svg></span>`;
 };
 
 /* ---------------- Estado ---------------- */
