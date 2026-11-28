@@ -2,7 +2,7 @@
 (function () {
 'use strict';
 
-const VERSION = 'V.19';
+const VERSION = 'V.2026.20';
 const CHANGELOG = [
   ['V.17', '2026-11-26', 'Motivos de ausencia configurables en Parámetros: nombre, color, días por defecto, aviso por WhatsApp y si bloquea rutas. Se pueden agregar motivos nuevos.'],
   ['V.16', '2026-11-26', 'Nuevo tipo de ausencia “Cita IGSS” en verde, separado de “Suspensión IGSS” (azul); con su botón, leyenda, plantilla de WhatsApp y aviso al registrarla.'],
